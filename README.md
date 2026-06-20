@@ -149,3 +149,8 @@ open your browser and go to `http://localhost:5555` to see the dashboard.
 ## POSTMAN Collection
 
 Download the POSTMAN collection from [/assets/mini-rag-app.postman_collection.json](/assets/mini-rag-app.postman_collection.json)
+
+## API Documentation for Frontend Work
+
+- OpenAPI spec: [docs/api/openapi.yaml](docs/api/openapi.yaml)
+- Frontend integration guide: [docs/api/frontend-api-guide.md](docs/api/frontend-api-guide.md)

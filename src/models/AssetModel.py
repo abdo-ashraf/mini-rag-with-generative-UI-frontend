@@ -3,6 +3,7 @@ from .db_schemes import Asset
 from .enums.DataBaseEnum import DataBaseEnum
 from bson import ObjectId
 from sqlalchemy.future import select
+from sqlalchemy import delete
 
 class AssetModel(BaseDataModel):
 
@@ -24,7 +25,7 @@ class AssetModel(BaseDataModel):
             await session.refresh(asset)
         return asset
 
-    async def get_all_project_assets(self, asset_project_id: str, asset_type: str):
+    async def get_all_project_assets(self, asset_project_id: int, asset_type: str):
 
         async with self.db_client() as session:
             stmt = select(Asset).where(
@@ -35,7 +36,15 @@ class AssetModel(BaseDataModel):
             records = result.scalars().all()
         return records
 
-    async def get_asset_record(self, asset_project_id: str, asset_name: str):
+    async def delete_assets_by_project_id(self, asset_project_id: int):
+        async with self.db_client() as session:
+            async with session.begin():
+                stmt = delete(Asset).where(Asset.asset_project_id == asset_project_id)
+                result = await session.execute(stmt)
+                await session.commit()
+        return result.rowcount
+
+    async def get_asset_record(self, asset_project_id: int, asset_name: str):
 
         async with self.db_client() as session:
             stmt = select(Asset).where(

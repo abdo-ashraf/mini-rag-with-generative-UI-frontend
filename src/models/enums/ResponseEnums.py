@@ -21,4 +21,6 @@ class ResponseSignal(Enum):
     RAG_ANSWER_SUCCESS = "rag_answer_success"
     DATA_PUSH_TASK_READY="data_push_task_ready"
     PROCESS_AND_PUSH_WORKFLOW_READY="process_and_push_workflow_ready"
+    PROJECT_DELETE_SUCCESS="project_delete_success"
+    PROJECT_DELETE_ERROR="project_delete_error"
     

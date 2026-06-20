@@ -1,0 +1,462 @@
+openapi: 3.1.0
+info:
+  title: Mini RAG API
+  version: 1.0.0
+  description: >-
+    Frontend-oriented API specification for the Mini RAG backend.
+    The service uses a signal-based response envelope and exposes async
+    Celery-backed operations for file processing and indexing.
+servers:
+  - url: http://localhost:8000
+    description: Local FastAPI server
+  - url: http://localhost
+    description: Nginx reverse proxy
+tags:
+  - name: Base
+    description: App metadata and health-style entry point.
+  - name: Data
+    description: Upload and processing flows for source files.
+  - name: NLP
+    description: Index inspection, semantic search, and RAG answer generation.
+  - name: Monitoring
+    description: Operational Prometheus metrics.
+paths:
+  /api/v1/:
+    get:
+      tags: [Base]
+      summary: Get app name and version
+      operationId: getWelcome
+      responses:
+        '200':
+          description: App metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppInfo'
+              examples:
+                example:
+                  value:
+                    app_name: Mini RAG
+                    app_version: 1.0.0
+
+  /api/v1/data/upload/{project_id}:
+    post:
+      tags: [Data]
+      summary: Upload a file for a project
+      operationId: uploadData
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to upload. The backend validates type and size.
+      responses:
+        '200':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SignalEnvelope'
+                  - type: object
+                    required: [file_id]
+                    properties:
+                      file_id:
+                        type: string
+                        description: Asset record id returned by the backend.
+              examples:
+                success:
+                  value:
+                    signal: file_upload_success
+                    file_id: '42'
+        '400':
+          description: Validation or upload failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignalEnvelope'
+              examples:
+                invalidType:
+                  value:
+                    signal: file_type_not_supported
+                tooLarge:
+                  value:
+                    signal: file_size_exceeded
+                writeFailed:
+                  value:
+                    signal: file_upload_failed
+
+  /api/v1/data/process/{project_id}:
+    post:
+      tags: [Data]
+      summary: Queue file chunking for a project
+      operationId: processData
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessRequest'
+            examples:
+              default:
+                value:
+                  file_id: '42'
+                  chunk_size: 100
+                  overlap_size: 20
+                  do_reset: 0
+      responses:
+        '200':
+          description: Async processing job created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SignalEnvelope'
+                  - type: object
+                    required: [task_id]
+                    properties:
+                      task_id:
+                        type: string
+              examples:
+                example:
+                  value:
+                    signal: processing_success
+                    task_id: 4a0bcf0d-1b45-4f5e-8d74-3de0d7f9d2c2
+
+  /api/v1/data/process-and-push/{project_id}:
+    post:
+      tags: [Data]
+      summary: Queue file processing and vector indexing as one workflow
+      operationId: processAndPushData
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessRequest'
+      responses:
+        '200':
+          description: Async workflow job created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SignalEnvelope'
+                  - type: object
+                    required: [workflow_task_id]
+                    properties:
+                      workflow_task_id:
+                        type: string
+              examples:
+                example:
+                  value:
+                    signal: process_and_push_workflow_ready
+                    workflow_task_id: 0d6c2dd3-7c6d-4e73-9f9f-6d5d0fd3b8f6
+
+  /api/v1/nlp/index/push/{project_id}:
+    post:
+      tags: [NLP]
+      summary: Queue vector indexing for processed chunks
+      operationId: pushIndex
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushRequest'
+      responses:
+        '200':
+          description: Async indexing job created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SignalEnvelope'
+                  - type: object
+                    required: [task_id]
+                    properties:
+                      task_id:
+                        type: string
+              examples:
+                example:
+                  value:
+                    signal: data_push_task_ready
+                    task_id: 27d4865e-0d9a-4f79-a5cb-7f0a51077efc
+
+  /api/v1/nlp/index/info/{project_id}:
+    get:
+      tags: [NLP]
+      summary: Get vector collection information for a project
+      operationId: getIndexInfo
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Vector DB collection info
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SignalEnvelope'
+                  - type: object
+                    required: [collection_info]
+                    properties:
+                      collection_info:
+                        $ref: '#/components/schemas/LooseObject'
+              examples:
+                example:
+                  value:
+                    signal: vectordb_collection_retrieved
+                    collection_info:
+                      name: collection_768_1
+                      points_count: 128
+                      vectors_count: 128
+
+  /api/v1/nlp/index/search/{project_id}:
+    post:
+      tags: [NLP]
+      summary: Run semantic search over the project index
+      operationId: searchIndex
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+            examples:
+              example:
+                value:
+                  text: What is this document about?
+                  limit: 5
+      responses:
+        '200':
+          description: Search results returned
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SignalEnvelope'
+                  - type: object
+                    required: [results]
+                    properties:
+                      results:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/RetrievedDocument'
+              examples:
+                example:
+                  value:
+                    signal: vectordb_search_success
+                    results:
+                      - text: The document explains the indexing workflow.
+                        score: 0.91
+                      - text: The file upload step stores the asset on disk.
+                        score: 0.84
+        '400':
+          description: Search failed or no records matched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignalEnvelope'
+              examples:
+                failed:
+                  value:
+                    signal: vectordb_search_error
+
+  /api/v1/nlp/index/answer/{project_id}:
+    post:
+      tags: [NLP]
+      summary: Generate a RAG answer from the project index
+      operationId: answerRag
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+            examples:
+              example:
+                value:
+                  text: Summarize the uploaded content.
+                  limit: 5
+      responses:
+        '200':
+          description: Generated answer returned
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SignalEnvelope'
+                  - type: object
+                    required: [answer, full_prompt, chat_history]
+                    properties:
+                      answer:
+                        type: string
+                      full_prompt:
+                        type: string
+                      chat_history:
+                        type: array
+                        description: >-
+                          Debugging payload passed to the generation provider.
+                          Treat as opaque in the UI; the object shape varies by
+                          LLM backend.
+                        items:
+                          $ref: '#/components/schemas/LooseObject'
+              examples:
+                example:
+                  value:
+                    signal: rag_answer_success
+                    answer: The document describes a minimal RAG workflow.
+                    full_prompt: "...assembled prompt..."
+                    chat_history:
+                      - role: system
+                        content: You are a helpful assistant.
+        '400':
+          description: No answer could be generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignalEnvelope'
+              examples:
+                failed:
+                  value:
+                    signal: rag_answer_error
+
+  /TrhBVe_m5gg2002_E5VVqS:
+    get:
+      tags: [Monitoring]
+      summary: Prometheus metrics endpoint
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Prometheus metrics payload
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  parameters:
+    ProjectId:
+      name: project_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      description: Numeric project identifier. The backend auto-creates the project record if it does not exist.
+
+  schemas:
+    AppInfo:
+      type: object
+      required: [app_name, app_version]
+      properties:
+        app_name:
+          type: string
+        app_version:
+          type: string
+
+    SignalEnvelope:
+      type: object
+      required: [signal]
+      properties:
+        signal:
+          type: string
+          description: >-
+            Backend response code. Frontend code should branch on this field
+            instead of assuming HTTP status alone is enough.
+          enum:
+            - file_validate_successfully
+            - file_type_not_supported
+            - file_size_exceeded
+            - file_upload_success
+            - file_upload_failed
+            - processing_success
+            - processing_failed
+            - not_found_files
+            - no_file_found_with_this_id
+            - project_not_found
+            - insert_into_vectordb_error
+            - insert_into_vectordb_success
+            - vectordb_collection_retrieved
+            - vectordb_search_error
+            - vectordb_search_success
+            - rag_answer_error
+            - rag_answer_success
+            - data_push_task_ready
+            - process_and_push_workflow_ready
+
+    ProcessRequest:
+      type: object
+      required: []
+      properties:
+        file_id:
+          type: string
+          nullable: true
+          description: Optional uploaded asset id to limit processing to one file.
+        chunk_size:
+          type: integer
+          default: 100
+          minimum: 1
+        overlap_size:
+          type: integer
+          default: 20
+          minimum: 0
+        do_reset:
+          type: integer
+          default: 0
+          description: Use 1 to reset the vector collection before indexing.
+
+    PushRequest:
+      type: object
+      required: []
+      properties:
+        do_reset:
+          type: integer
+          default: 0
+          description: Use 1 to recreate the vector collection before pushing chunks.
+
+    SearchRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          description: User query or prompt text.
+        limit:
+          type: integer
+          default: 5
+          minimum: 1
+          description: Maximum number of documents to retrieve.
+
+    RetrievedDocument:
+      type: object
+      required: [text, score]
+      properties:
+        text:
+          type: string
+        score:
+          type: number
+          format: float
+
+    LooseObject:
+      type: object
+      additionalProperties: true

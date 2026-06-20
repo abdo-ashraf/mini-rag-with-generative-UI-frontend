@@ -24,7 +24,15 @@ class ProjectModel(BaseDataModel):
         
         return project
 
-    async def get_project_or_create_one(self, project_id: str):
+    async def get_project_by_id(self, project_id: int):
+        async with self.db_client() as session:
+            async with session.begin():
+                query = select(Project).where(Project.project_id == project_id)
+                result = await session.execute(query)
+                project = result.scalar_one_or_none()
+                return project
+
+    async def get_project_or_create_one(self, project_id: int):
         async with self.db_client() as session:
             async with session.begin():
                 query = select(Project).where(Project.project_id == project_id)
@@ -39,6 +47,17 @@ class ProjectModel(BaseDataModel):
                     return project
                 else:
                     return project
+
+    async def delete_project(self, project_id: int):
+        async with self.db_client() as session:
+            async with session.begin():
+                query = select(Project).where(Project.project_id == project_id)
+                result = await session.execute(query)
+                project = result.scalar_one_or_none()
+                if project:
+                    await session.delete(project)
+                    await session.commit()
+            return project
 
     async def get_all_projects(self, page: int=1, page_size: int=10):
 
@@ -55,7 +74,13 @@ class ProjectModel(BaseDataModel):
                 if total_documents % page_size > 0:
                     total_pages += 1
 
-                query = select(Project).offset((page - 1) * page_size ).limit(page_size)
-                projects = await session.execute(query).scalars().all()
+                query = (
+                    select(Project)
+                    .order_by(Project.project_id.desc())
+                    .offset((page - 1) * page_size)
+                    .limit(page_size)
+                )
+                result = await session.execute(query)
+                projects = result.scalars().all()
 
                 return projects, total_pages

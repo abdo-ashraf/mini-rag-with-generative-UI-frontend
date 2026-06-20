@@ -49,10 +49,18 @@ async def upload_data(request: Request, project_id: int, file: UploadFile,
             }
         )
 
-    project_dir_path = ProjectController().get_project_path(project_id=project_id)
+    if not file.filename:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "signal": ResponseSignal.FILE_UPLOAD_FAILED.value
+            }
+        )
+
+    project_dir_path = ProjectController().get_project_path(project_id=str(project_id))
     file_path, file_id = data_controller.generate_unique_filepath(
         orig_file_name=file.filename,
-        project_id=project_id
+        project_id=str(project_id)
     )
 
     try:
@@ -79,6 +87,7 @@ async def upload_data(request: Request, project_id: int, file: UploadFile,
         asset_project_id=project.project_id,
         asset_type=AssetTypeEnum.FILE.value,
         asset_name=file_id,
+        asset_raw_name=file.filename,
         asset_size=os.path.getsize(file_path)
     )
 
@@ -91,6 +100,46 @@ async def upload_data(request: Request, project_id: int, file: UploadFile,
             }
         )
 
+
+@data_router.get("/files/{project_id}")
+async def get_project_files(request: Request, project_id: int):
+
+    project_model = await ProjectModel.create_instance(
+        db_client=request.app.db_client
+    )
+
+    project = await project_model.get_project_or_create_one(
+        project_id=project_id
+    )
+
+    asset_model = await AssetModel.create_instance(
+        db_client=request.app.db_client
+    )
+
+    project_assets = await asset_model.get_all_project_assets(
+        asset_project_id=project_id,
+        asset_type=AssetTypeEnum.FILE.value,
+    )
+
+    files = [
+        {
+            "file_id": asset.asset_id,
+            "file_name": asset.asset_raw_name,
+            "file_size": asset.asset_size,
+            "created_at": asset.created_at.isoformat() if asset.created_at else None,
+            "updated_at": asset.updated_at.isoformat() if asset.updated_at else None,
+        }
+        for asset in sorted(project_assets, key=lambda item: item.asset_id, reverse=True)
+    ]
+
+    return JSONResponse(
+        content={
+            "project_id": project_id,
+            "file_count": len(files),
+            "files": files,
+        }
+    )
+
 @data_router.post("/process/{project_id}")
 async def process_endpoint(request: Request, project_id: int, process_request: ProcessRequest):
 
@@ -99,7 +148,7 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
     do_reset = process_request.do_reset
 
     task = process_project_files.delay(
-        project_id=project_id,
+        project_id=str(project_id),
         file_id=process_request.file_id,
         chunk_size=chunk_size,
         overlap_size=overlap_size,
@@ -121,7 +170,7 @@ async def process_and_push_endpoint(request: Request, project_id: int, process_r
     do_reset = process_request.do_reset
 
     workflow_task = process_and_push_workflow.delay(
-        project_id=project_id,
+        project_id=str(project_id),
         file_id=process_request.file_id,
         chunk_size=chunk_size,
         overlap_size=overlap_size,
