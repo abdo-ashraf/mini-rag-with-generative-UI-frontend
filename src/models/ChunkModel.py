@@ -43,6 +43,21 @@ class ChunkModel(BaseDataModel):
             await session.commit()
         return len(chunks)
 
+    async def delete_chunks_by_asset_id(self, asset_id: int):
+        async with self.db_client() as session:
+            async with session.begin():
+                stmt = delete(DataChunk).where(DataChunk.chunk_asset_id == asset_id)
+                result = await session.execute(stmt)
+                await session.commit()
+        return result.rowcount
+
+    async def get_chunk_ids_by_asset_id(self, asset_id: int):
+        async with self.db_client() as session:
+            stmt = select(DataChunk.chunk_id).where(DataChunk.chunk_asset_id == asset_id)
+            result = await session.execute(stmt)
+            ids = result.scalars().all()
+        return ids
+
     async def delete_chunks_by_project_id(self, project_id: ObjectId):
         async with self.db_client() as session:
             stmt = delete(DataChunk).where(DataChunk.chunk_project_id == project_id)

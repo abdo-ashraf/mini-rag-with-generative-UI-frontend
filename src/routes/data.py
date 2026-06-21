@@ -162,6 +162,65 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
         }
     )
 
+@data_router.delete("/files/{project_id}/{file_id}")
+async def delete_project_file(request: Request, project_id: int, file_id: int):
+
+    asset_model = await AssetModel.create_instance(
+        db_client=request.app.db_client
+    )
+
+    asset = await asset_model.get_asset_by_id(asset_id=file_id)
+    if not asset or asset.asset_project_id != project_id:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "signal": ResponseSignal.FILE_DELETE_ERROR.value,
+                "message": f"File {file_id} not found in project {project_id}"
+            }
+        )
+
+    try:
+        chunk_model = await ChunkModel.create_instance(
+            db_client=request.app.db_client
+        )
+
+        chunk_ids = await chunk_model.get_chunk_ids_by_asset_id(asset_id=file_id)
+
+        if chunk_ids:
+            collection_name = f"collection_{request.app.vectordb_client.default_vector_size}_{project_id}"
+            await request.app.vectordb_client.delete_by_record_ids(
+                collection_name=collection_name,
+                record_ids=list(chunk_ids)
+            )
+
+        await chunk_model.delete_chunks_by_asset_id(asset_id=file_id)
+
+        await asset_model.delete_asset_by_id(asset_id=file_id)
+
+        project_controller = ProjectController()
+        project_path = project_controller.get_project_path(project_id=str(project_id))
+        file_path = os.path.join(project_path, asset.asset_name)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        return JSONResponse(
+            content={
+                "signal": ResponseSignal.FILE_DELETE_SUCCESS.value,
+                "file_id": file_id,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error while deleting file {file_id}: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "signal": ResponseSignal.FILE_DELETE_ERROR.value,
+                "message": f"Failed to delete file {file_id}"
+            }
+        )
+
+
 @data_router.post("/process-and-push/{project_id}")
 async def process_and_push_endpoint(request: Request, project_id: int, process_request: ProcessRequest):
 

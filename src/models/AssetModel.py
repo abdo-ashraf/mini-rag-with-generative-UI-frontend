@@ -44,6 +44,20 @@ class AssetModel(BaseDataModel):
                 await session.commit()
         return result.rowcount
 
+    async def get_asset_by_id(self, asset_id: int):
+        async with self.db_client() as session:
+            stmt = select(Asset).where(Asset.asset_id == asset_id)
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def delete_asset_by_id(self, asset_id: int):
+        async with self.db_client() as session:
+            async with session.begin():
+                stmt = delete(Asset).where(Asset.asset_id == asset_id)
+                result = await session.execute(stmt)
+                await session.commit()
+        return result.rowcount
+
     async def get_asset_record(self, asset_project_id: int, asset_name: str):
 
         async with self.db_client() as session:

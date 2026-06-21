@@ -122,7 +122,23 @@ export const useSearchIndex = (projectId: number) => {
   })
 }
 
-// 8. Delete project
+// 8. Delete a file from a project
+export const useDeleteFile = (projectId: number) => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (fileId: number) => ragService.deleteFile(projectId, fileId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ragQueryKeys.projectFiles(projectId),
+      })
+      queryClient.invalidateQueries({
+        queryKey: ragQueryKeys.indexInfo(projectId),
+      })
+    },
+  })
+}
+
+// 9. Delete project
 export const useDeleteProject = () => {
   const queryClient = useQueryClient()
   return useMutation({

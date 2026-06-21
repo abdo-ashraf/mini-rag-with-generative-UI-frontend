@@ -131,6 +131,18 @@ class QdrantDBProvider(VectorDBInterface):
 
         return True
         
+    async def delete_by_record_ids(self, collection_name: str, record_ids: list):
+        if not await self.is_collection_existed(collection_name):
+            return False
+        self.client.delete(
+            collection_name=collection_name,
+            points_selector=models.PointIdsList(
+                points=record_ids
+            ),
+            wait=True,
+        )
+        return True
+
     async def search_by_vector(self, collection_name: str, vector: list, limit: int = 5):
 
         results = self.client.search(

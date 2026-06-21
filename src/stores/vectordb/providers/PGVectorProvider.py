@@ -277,6 +277,18 @@ class PGVectorProvider(VectorDBInterface):
 
         return True
     
+    async def delete_by_record_ids(self, collection_name: str, record_ids: list):
+        if not record_ids:
+            return True
+        async with self.db_client() as session:
+            async with session.begin():
+                placeholders = ','.join([f':cid_{i}' for i in range(len(record_ids))])
+                params = {f'cid_{i}': cid for i, cid in enumerate(record_ids)}
+                delete_sql = sql_text(f'DELETE FROM {collection_name} WHERE {PgVectorTableSchemeEnums.CHUNK_ID.value} IN ({placeholders})')
+                await session.execute(delete_sql, params)
+                await session.commit()
+        return True
+
     async def search_by_vector(self, collection_name: str, vector: list, limit: int):
 
         is_collection_existed = await self.is_collection_existed(collection_name=collection_name)

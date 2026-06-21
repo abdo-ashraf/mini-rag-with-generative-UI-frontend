@@ -23,6 +23,8 @@ export const SignalSchema = z.enum([
   "process_and_push_workflow_ready",
   "project_delete_success",
   "project_delete_error",
+  "file_delete_success",
+  "file_delete_error",
 ])
 export type ResponseSignal = z.infer<typeof SignalSchema>
 

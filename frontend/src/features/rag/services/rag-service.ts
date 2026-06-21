@@ -162,6 +162,18 @@ export const ragService = {
     return handleResponse(response, schema)
   },
 
+  // DELETE /api/v1/data/files/{project_id}/{file_id}
+  async deleteFile(projectId: number, fileId: number): Promise<{ signal: string; file_id: number }> {
+    const response = await fetch(`/api/v1/data/files/${projectId}/${fileId}`, {
+      method: "DELETE",
+    })
+    const schema = z.object({
+      signal: z.string(),
+      file_id: z.number().int(),
+    })
+    return handleResponse(response, schema)
+  },
+
   // POST /api/v1/nlp/index/answer/{project_id}
   async answerRag(
     projectId: number,

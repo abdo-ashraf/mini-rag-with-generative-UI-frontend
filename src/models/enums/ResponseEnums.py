@@ -23,4 +23,6 @@ class ResponseSignal(Enum):
     PROCESS_AND_PUSH_WORKFLOW_READY="process_and_push_workflow_ready"
     PROJECT_DELETE_SUCCESS="project_delete_success"
     PROJECT_DELETE_ERROR="project_delete_error"
+    FILE_DELETE_SUCCESS="file_delete_success"
+    FILE_DELETE_ERROR="file_delete_error"
     
