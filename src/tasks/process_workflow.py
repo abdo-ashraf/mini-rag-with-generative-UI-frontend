@@ -18,6 +18,12 @@ def push_after_process_task(self, prev_task_result):
     project_id = prev_task_result.get("project_id")
     do_reset = prev_task_result.get("do_reset")
 
+    if project_id is None or do_reset is None:
+        raise ValueError(
+            f"Previous task result missing 'project_id' or 'do_reset'. "
+            f"Got: {prev_task_result}"
+        )
+
     task_results = asyncio.run(
         _index_data_content(self, project_id, do_reset)
     )

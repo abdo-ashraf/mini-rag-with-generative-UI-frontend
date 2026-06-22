@@ -57,12 +57,9 @@ export function IngestPanel() {
       },
       {
         onSuccess: (data) => {
-          if (data.task_id) {
-            setJobInfo({ type: "All Files Chunking Job Queued", id: data.task_id })
-            setSuccessMsg("Chunking task for all project files started in backend! Celery Task ID returned.")
-          } else {
-            setErrorData(data.signal || "Failed to start chunking job.")
-          }
+          setSuccessMsg(
+            `Chunking complete! ${data.inserted_chunks} chunks created from ${data.processed_files} file(s).`
+          )
         },
         onError: (err: any) => {
           setErrorData(err.message || "Processing failed")
@@ -111,12 +108,9 @@ export function IngestPanel() {
       },
       {
         onSuccess: (data) => {
-          if (data.task_id) {
-            setJobInfo({ type: "Vector DB Indexing Job Queued", id: data.task_id })
-            setSuccessMsg("Pushed existing chunks to Vector Database!")
-          } else {
-            setErrorData(data.signal || "Failed to queue indexing job.")
-          }
+          setSuccessMsg(
+            `Indexing complete! ${data.inserted_items_count} chunk(s) pushed to the vector database.`
+          )
         },
         onError: (err: any) => {
           setErrorData(err.message || "Indexing failed")

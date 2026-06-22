@@ -10,6 +10,8 @@ import {
   ChunksCountResponseSchema,
   SearchResponseSchema,
   AnswerResponseSchema,
+  ProcessResponseSchema,
+  PushIndexResponseSchema,
   type AppInfo,
   type ProjectsResponse,
   type CreateProjectResponse,
@@ -20,6 +22,8 @@ import {
   type ChunksCountResponse,
   type SearchResponse,
   type AnswerResponse,
+  type ProcessResponse,
+  type PushIndexResponse,
   type ProcessRequest,
 } from "../types/rag-schema"
 
@@ -98,13 +102,13 @@ export const ragService = {
   async processFile(
     projectId: number,
     payload: ProcessRequest
-  ): Promise<TaskResponse> {
+  ): Promise<ProcessResponse> {
     const response = await fetch(`/api/v1/data/process/${projectId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     })
-    return handleResponse(response, TaskResponseSchema)
+    return handleResponse(response, ProcessResponseSchema)
   },
 
   // POST /api/v1/data/process-and-push/{project_id}
@@ -124,13 +128,13 @@ export const ragService = {
   async pushIndex(
     projectId: number,
     payload: { do_reset: number }
-  ): Promise<TaskResponse> {
+  ): Promise<PushIndexResponse> {
     const response = await fetch(`/api/v1/nlp/index/push/${projectId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     })
-    return handleResponse(response, TaskResponseSchema)
+    return handleResponse(response, PushIndexResponseSchema)
   },
 
   // GET /api/v1/nlp/index/info/{project_id}

@@ -1,7 +1,7 @@
 import { useState, useRef } from "react"
 import { useRagStore, type UploadedFile } from "../store/rag-store"
 import { useIndexInfo, useProjectFiles, useDeleteFile, useUploadFile, useChunksCount } from "../hooks/use-rag"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/shared/ui/card"
+import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import { Badge } from "@/shared/ui/badge"
 import { Progress } from "@/shared/ui/progress"
@@ -120,7 +120,7 @@ export function InfoPanel() {
   const collection = data?.collection_info
   const files = filesData?.files ?? []
   const fileCount = filesData?.file_count ?? 0
-  const pointsCount = collection?.points_count ?? collection?.vectors_count ?? 0
+  const pointsCount = collection?.record_count ?? 0
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 max-w-6xl mx-auto w-full">
@@ -182,7 +182,7 @@ export function InfoPanel() {
                   </p>
                 </div>
               ) : (
-                <div className="max-h-[28rem] overflow-auto">
+                <div className="max-h-56 overflow-auto">
                   <ul className="divide-y divide-border">
                     {files.map((file) => (
                       <li key={file.file_id} className="px-4 py-3.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

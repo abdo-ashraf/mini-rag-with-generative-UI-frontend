@@ -63,10 +63,9 @@ class IdempotencyManager:
         session = self.db_client()
         try:
             stmt = select(CeleryTaskExecution).where(
-                CeleryTaskExecution.celery_task_id == celery_task_id,
                 CeleryTaskExecution.task_name == task_name,
                 CeleryTaskExecution.task_args_hash == args_hash
-            )
+            ).order_by(CeleryTaskExecution.created_at.desc()).limit(1)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
         finally:
@@ -86,11 +85,7 @@ class IdempotencyManager:
         if not existing_task:
             return True, None
             
-        # Don't execute if task is already completed successfully
-        if existing_task.status == 'SUCCESS':
-            return False, existing_task
-            
-        # Check if task is stuck (running longer than time limit + 60 seconds)
+        # Don't execute if task is currently running (PENDING, STARTED, RETRY) within time limit
         if existing_task.status in ['PENDING', 'STARTED', 'RETRY']:
             if existing_task.started_at:
                 time_elapsed = (datetime.utcnow() - existing_task.started_at).total_seconds()
@@ -99,7 +94,7 @@ class IdempotencyManager:
                     return True, existing_task  # Task is stuck, allow re-execution
             return False, existing_task  # Task is still running within time limit
             
-        # Re-execute if previous task failed
+        # Re-execute if previous task succeeded or failed (user wants to run again)
         return True, existing_task
     
     async def cleanup_old_tasks(self, time_retention: int = 86400) -> int:

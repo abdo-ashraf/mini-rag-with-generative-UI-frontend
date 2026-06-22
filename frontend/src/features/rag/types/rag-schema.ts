@@ -92,13 +92,29 @@ export const TaskResponseSchema = z.object({
 })
 export type TaskResponse = z.infer<typeof TaskResponseSchema>
 
+// 5b. Process Response Schema (synchronous chunking result)
+export const ProcessResponseSchema = z.object({
+  signal: SignalSchema,
+  inserted_chunks: z.number().int(),
+  processed_files: z.number().int(),
+  project_id: z.number().int(),
+  do_reset: z.number().int(),
+})
+export type ProcessResponse = z.infer<typeof ProcessResponseSchema>
+
+// 5c. Push Index Response Schema (synchronous indexing result)
+export const PushIndexResponseSchema = z.object({
+  signal: SignalSchema,
+  inserted_items_count: z.number().int(),
+})
+export type PushIndexResponse = z.infer<typeof PushIndexResponseSchema>
+
 // 6. Vector Collection Info Schema
 export const CollectionInfoSchema = z.object({
   signal: SignalSchema,
   collection_info: z.object({
-    name: z.string().optional(),
-    points_count: z.number().optional(),
-    vectors_count: z.number().optional(),
+    table_info: z.any().optional(),
+    record_count: z.number().optional(),
   }).catchall(z.any()).nullable(),
 })
 export type CollectionInfo = z.infer<typeof CollectionInfoSchema>
