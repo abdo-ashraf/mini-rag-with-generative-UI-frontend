@@ -8,6 +8,7 @@ export const ragQueryKeys = {
   projects: () => ["rag", "projects"] as const,
   projectFiles: (projectId: number) => ["rag", "project-files", projectId] as const,
   indexInfo: (projectId: number) => ["rag", "index-info", projectId] as const,
+  chunksCount: (projectId: number) => ["rag", "chunks-count", projectId] as const,
 }
 
 // 1. Get welcome metadata
@@ -51,12 +52,23 @@ export const useProjectFiles = (projectId: number) => {
 }
 
 // 2. Get vector collection info
-export const useIndexInfo = (projectId: number) => {
+export const useIndexInfo = (projectId: number, refetchIntervalMs: number | false = false) => {
   return useQuery({
     queryKey: ragQueryKeys.indexInfo(projectId),
     queryFn: () => ragService.getIndexInfo(projectId),
     enabled: projectId > 0,
     staleTime: 1000 * 10, // 10s stale
+    refetchInterval: refetchIntervalMs,
+  })
+}
+
+// 2.5 Get project chunks count
+export const useChunksCount = (projectId: number) => {
+  return useQuery({
+    queryKey: ragQueryKeys.chunksCount(projectId),
+    queryFn: () => ragService.getChunksCount(projectId),
+    enabled: projectId > 0,
+    staleTime: 1000 * 10,
   })
 }
 
@@ -66,10 +78,6 @@ export const useUploadFile = (projectId: number) => {
   return useMutation({
     mutationFn: (file: File) => ragService.uploadFile(projectId, file),
     onSuccess: () => {
-      // Invalidate collection info because uploading files might trigger updates
-      queryClient.invalidateQueries({
-        queryKey: ragQueryKeys.indexInfo(projectId),
-      })
       queryClient.invalidateQueries({
         queryKey: ragQueryKeys.projectFiles(projectId),
       })
@@ -79,9 +87,15 @@ export const useUploadFile = (projectId: number) => {
 
 // 4. Process file (chunking only)
 export const useProcessFile = (projectId: number) => {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (payload: ProcessRequest) =>
       ragService.processFile(projectId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ragQueryKeys.chunksCount(projectId),
+      })
+    },
   })
 }
 
@@ -92,7 +106,9 @@ export const useProcessAndPush = (projectId: number) => {
     mutationFn: (payload: ProcessRequest) =>
       ragService.processAndPush(projectId, payload),
     onSuccess: () => {
-      // Invalidate collection info
+      queryClient.invalidateQueries({
+        queryKey: ragQueryKeys.chunksCount(projectId),
+      })
       queryClient.invalidateQueries({
         queryKey: ragQueryKeys.indexInfo(projectId),
       })
@@ -133,6 +149,9 @@ export const useDeleteFile = (projectId: number) => {
       })
       queryClient.invalidateQueries({
         queryKey: ragQueryKeys.indexInfo(projectId),
+      })
+      queryClient.invalidateQueries({
+        queryKey: ragQueryKeys.chunksCount(projectId),
       })
     },
   })

@@ -1,7 +1,6 @@
-import { useState, useRef } from "react"
-import { useRagStore, type UploadedFile } from "../store/rag-store"
+import { useState } from "react"
+import { useRagStore } from "../store/rag-store"
 import {
-  useUploadFile,
   useProcessFile,
   useProcessAndPush,
   usePushIndex,
@@ -16,16 +15,11 @@ import {
 } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
-import { Badge } from "@/shared/ui/badge"
-import { Progress } from "@/shared/ui/progress"
 import {
-  UploadIcon,
   Settings2Icon,
   CpuIcon,
-  FileTextIcon,
   SparklesIcon,
   CheckCircle2Icon,
-  InfoIcon,
   DatabaseIcon,
 } from "lucide-react"
 
@@ -38,99 +32,25 @@ export function IngestPanel() {
     setOverlapSize,
     doReset,
     setDoReset,
-    activeFileId,
-    setActiveFileId,
-    uploadedFiles,
-    addUploadedFile,
   } = useRagStore()
 
-  const [dragActive, setDragActive] = useState(false)
-  const [localFile, setLocalFile] = useState<File | null>(null)
   const [jobInfo, setJobInfo] = useState<{ type: string; id: string } | null>(null)
   const [errorMsg, setErrorData] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Hooks
-  const uploadMutation = useUploadFile(projectId)
   const processMutation = useProcessFile(projectId)
   const processAndPushMutation = useProcessAndPush(projectId)
   const pushIndexMutation = usePushIndex(projectId)
 
-  // Drag and drop handlers
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true)
-    } else if (e.type === "dragleave") {
-      setDragActive(false)
-    }
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragActive(false)
-
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setLocalFile(e.dataTransfer.files[0])
-      setErrorData(null)
-      setSuccessMsg(null)
-    }
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setLocalFile(e.target.files[0])
-      setErrorData(null)
-      setSuccessMsg(null)
-    }
-  }
-
-  const triggerFileInput = () => {
-    fileInputRef.current?.click()
-  }
-
-  // Action: Upload
-  const handleUpload = () => {
-    if (!localFile) return
-    setErrorData(null)
-    setSuccessMsg(null)
-    setJobInfo(null)
-
-    uploadMutation.mutate(localFile, {
-      onSuccess: (data) => {
-        if (data.signal === "file_upload_success" && data.file_id) {
-          const newFile: UploadedFile = {
-            id: data.file_id,
-            name: localFile.name,
-            size: localFile.size,
-            uploadedAt: new Date().toLocaleTimeString(),
-          };
-          addUploadedFile(newFile)
-          setSuccessMsg("Document uploaded successfully! File ID: " + data.file_id)
-          setLocalFile(null)
-        } else {
-          setErrorData(data.signal || "Upload failed")
-        }
-      },
-      onError: (err: any) => {
-        setErrorData(err.message || "Failed to upload file")
-      },
-    })
-  }
-
-  // Action: Process (Chunk Only)
+  // Action: Process (Chunk Only) — processes all project files
   const handleProcessOnly = () => {
-    if (!activeFileId) return
     setErrorData(null)
     setSuccessMsg(null)
     setJobInfo(null)
 
     processMutation.mutate(
       {
-        file_id: activeFileId,
         chunk_size: chunkSize,
         overlap_size: overlapSize,
         do_reset: doReset ? 1 : 0,
@@ -138,8 +58,8 @@ export function IngestPanel() {
       {
         onSuccess: (data) => {
           if (data.task_id) {
-            setJobInfo({ type: "File Chunking Job Queued", id: data.task_id })
-            setSuccessMsg("Document chunking task started in backend! Celery Task ID returned.")
+            setJobInfo({ type: "All Files Chunking Job Queued", id: data.task_id })
+            setSuccessMsg("Chunking task for all project files started in backend! Celery Task ID returned.")
           } else {
             setErrorData(data.signal || "Failed to start chunking job.")
           }
@@ -151,16 +71,14 @@ export function IngestPanel() {
     )
   }
 
-  // Action: Process and Push (Combined Workflow)
+  // Action: Process and Push (Combined Workflow) — processes all project files
   const handleProcessAndPush = () => {
-    if (!activeFileId) return
     setErrorData(null)
     setSuccessMsg(null)
     setJobInfo(null)
 
     processAndPushMutation.mutate(
       {
-        file_id: activeFileId,
         chunk_size: chunkSize,
         overlap_size: overlapSize,
         do_reset: doReset ? 1 : 0,
@@ -169,7 +87,7 @@ export function IngestPanel() {
         onSuccess: (data) => {
           if (data.workflow_task_id) {
             setJobInfo({ type: "Complete Indexing Workflow Queued", id: data.workflow_task_id })
-            setSuccessMsg("Full parsing, chunking, and vector indexing workflow started!")
+            setSuccessMsg("Full parsing, chunking, and vector indexing workflow started for all files!")
           } else {
             setErrorData(data.signal || "Failed to start workflow.")
           }
@@ -205,15 +123,6 @@ export function IngestPanel() {
         },
       }
     )
-  }
-
-  const formatBytes = (bytes: number, decimals = 2) => {
-    if (!+bytes) return "0 Bytes"
-    const k = 1024
-    const dm = decimals < 0 ? 0 : decimals
-    const sizes = ["Bytes", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
   }
 
   return (
@@ -287,54 +196,6 @@ export function IngestPanel() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Uploads History */}
-        <Card className="shadow-sm flex-1">
-          <CardHeader className="pb-3 border-b border-border">
-            <CardTitle className="text-md flex items-center gap-2">
-              <FileTextIcon className="size-4 text-primary" />
-              Document Logs
-            </CardTitle>
-            <CardDescription>
-              Recently uploaded files in this session.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-4 flex flex-col gap-3 max-h-[300px] overflow-y-auto">
-            {uploadedFiles.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground gap-1">
-                <InfoIcon className="size-5 text-muted-foreground/50" />
-                <span className="text-xs">No documents uploaded yet.</span>
-              </div>
-            ) : (
-              uploadedFiles.map((file) => (
-                <div
-                  key={file.id}
-                  onClick={() => setActiveFileId(file.id)}
-                  className={`flex items-start justify-between gap-3 p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
-                    activeFileId === file.id
-                      ? "bg-primary/5 border-primary"
-                      : "bg-background border-border hover:bg-muted/50"
-                  }`}
-                >
-                  <div className="flex items-start gap-2 truncate">
-                    <FileTextIcon className="size-4 text-muted-foreground shrink-0 mt-0.5" />
-                    <div className="flex flex-col truncate gap-0.5">
-                      <span className="font-semibold text-foreground truncate">
-                        {file.name}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        ID: {file.id} · {formatBytes(file.size)}
-                      </span>
-                    </div>
-                  </div>
-                  <Badge variant="secondary" className="shrink-0 text-[9px] px-1 py-0 h-4">
-                    {file.uploadedAt}
-                  </Badge>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {/* Main Action Panel */}
@@ -342,72 +203,14 @@ export function IngestPanel() {
         <Card className="shadow-sm">
           <CardHeader className="pb-3 border-b border-border">
             <CardTitle className="text-md flex items-center gap-2">
-              <UploadIcon className="size-4 text-primary" />
-              Upload & Index Documents
+              <CpuIcon className="size-4 text-primary" />
+              Process & Index Documents
             </CardTitle>
             <CardDescription>
-              Load files into the project space and trigger backend processing workers.
+              Trigger backend processing workers to chunk, index, and vectorize documents in the active project.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4 flex flex-col gap-5">
-            {/* File Drop Area */}
-            <div
-              onDragEnter={handleDrag}
-              onDragOver={handleDrag}
-              onDragLeave={handleDrag}
-              onDrop={handleDrop}
-              onClick={triggerFileInput}
-              className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-                dragActive
-                  ? "border-primary bg-primary/5"
-                  : localFile
-                  ? "border-green-400 bg-green-50/20"
-                  : "border-border hover:bg-muted/50"
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileChange}
-                className="hidden"
-                accept=".txt,.pdf,.md,.docx,.json"
-              />
-
-              <div className="flex items-center justify-center size-12 rounded-full bg-muted/60 text-muted-foreground mb-3">
-                <UploadIcon className="size-6" />
-              </div>
-
-              {localFile ? (
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-semibold text-foreground">
-                    Selected: {localFile.name}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    Ready to upload · {formatBytes(localFile.size)}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-semibold text-foreground">
-                    Drag & drop file here or click to browse
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    Supports TXT, PDF, MD, DOCX, JSON · Max 10MB
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Action feedbacks */}
-            {uploadMutation.isPending && (
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center justify-between text-xs font-semibold">
-                  <span className="text-primary">Uploading file to server...</span>
-                </div>
-                <Progress value={85} className="h-1.5" />
-              </div>
-            )}
-
             {errorMsg && (
               <div className="flex items-start gap-2.5 p-3 rounded-lg border border-red-100 bg-red-50/40 text-xs text-red-800">
                 <span className="font-semibold text-red-900 shrink-0">Error:</span>
@@ -445,32 +248,6 @@ export function IngestPanel() {
           </CardContent>
 
           <CardFooter className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 bg-muted/20">
-            {localFile ? (
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleUpload}
-                  disabled={uploadMutation.isPending}
-                  size="sm"
-                >
-                  <UploadIcon data-icon="inline-start" />
-                  Upload Now
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setLocalFile(null)}
-                  disabled={uploadMutation.isPending}
-                  size="sm"
-                >
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <span className="text-xs text-muted-foreground">
-                {activeFileId
-                  ? `Selected File ID: ${activeFileId}`
-                  : "No active file selected. Choose one above."}
-              </span>
-            )}
 
             <div className="flex flex-wrap gap-2">
               <Button
@@ -491,7 +268,6 @@ export function IngestPanel() {
                 variant="outline"
                 onClick={handleProcessOnly}
                 disabled={
-                  !activeFileId ||
                   processMutation.isPending ||
                   processAndPushMutation.isPending ||
                   pushIndexMutation.isPending
@@ -499,13 +275,12 @@ export function IngestPanel() {
                 size="sm"
               >
                 <CpuIcon className="size-4 mr-1.5" />
-                Chunk Only
+                Chunk All Files
               </Button>
 
               <Button
                 onClick={handleProcessAndPush}
                 disabled={
-                  !activeFileId ||
                   processMutation.isPending ||
                   processAndPushMutation.isPending ||
                   pushIndexMutation.isPending
@@ -513,7 +288,7 @@ export function IngestPanel() {
                 size="sm"
               >
                 <SparklesIcon data-icon="inline-start" />
-                Process & Index (Workflow)
+                Process & Index All (Workflow)
               </Button>
             </div>
           </CardFooter>

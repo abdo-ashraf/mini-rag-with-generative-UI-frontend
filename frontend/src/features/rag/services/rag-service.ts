@@ -7,6 +7,7 @@ import {
   FileUploadResponseSchema,
   TaskResponseSchema,
   CollectionInfoSchema,
+  ChunksCountResponseSchema,
   SearchResponseSchema,
   AnswerResponseSchema,
   type AppInfo,
@@ -16,6 +17,7 @@ import {
   type FileUploadResponse,
   type TaskResponse,
   type CollectionInfo,
+  type ChunksCountResponse,
   type SearchResponse,
   type AnswerResponse,
   type ProcessRequest,
@@ -148,6 +150,12 @@ export const ragService = {
       body: JSON.stringify(payload),
     })
     return handleResponse(response, SearchResponseSchema)
+  },
+
+  // GET /api/v1/data/chunks/count/{project_id}
+  async getChunksCount(projectId: number): Promise<ChunksCountResponse> {
+    const response = await fetch(`/api/v1/data/chunks/count/${projectId}`)
+    return handleResponse(response, ChunksCountResponseSchema)
   },
 
   // DELETE /api/v1/projects/{project_id}

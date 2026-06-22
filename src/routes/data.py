@@ -140,6 +140,38 @@ async def get_project_files(request: Request, project_id: int):
         }
     )
 
+@data_router.get("/chunks/count/{project_id}")
+async def get_chunks_count(request: Request, project_id: int):
+
+    chunk_model = await ChunkModel.create_instance(
+        db_client=request.app.db_client
+    )
+
+    try:
+        total_chunks = await chunk_model.get_total_chunks_count(project_id=project_id)
+    except Exception as e:
+        logger.error(f"Error getting chunks count for project {project_id}: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "signal": ResponseSignal.PROCESSING_FAILED.value,
+                "error": str(e),
+                "project_id": project_id,
+                "chunks_count": 0,
+            }
+        )
+
+    logger.info(f"Chunks count for project {project_id}: {total_chunks}")
+
+    return JSONResponse(
+        content={
+            "signal": ResponseSignal.CHUNKS_COUNT_RETRIEVED.value,
+            "project_id": project_id,
+            "chunks_count": total_chunks,
+        }
+    )
+
+
 @data_router.post("/process/{project_id}")
 async def process_endpoint(request: Request, project_id: int, process_request: ProcessRequest):
 
@@ -148,8 +180,7 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
     do_reset = process_request.do_reset
 
     task = process_project_files.delay(
-        project_id=str(project_id),
-        file_id=process_request.file_id,
+        project_id=project_id,
         chunk_size=chunk_size,
         overlap_size=overlap_size,
         do_reset=do_reset,
@@ -229,8 +260,7 @@ async def process_and_push_endpoint(request: Request, project_id: int, process_r
     do_reset = process_request.do_reset
 
     workflow_task = process_and_push_workflow.delay(
-        project_id=str(project_id),
-        file_id=process_request.file_id,
+        project_id=project_id,
         chunk_size=chunk_size,
         overlap_size=overlap_size,
         do_reset=do_reset,

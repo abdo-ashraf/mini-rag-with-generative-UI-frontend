@@ -25,4 +25,6 @@ class ResponseSignal(Enum):
     PROJECT_DELETE_ERROR="project_delete_error"
     FILE_DELETE_SUCCESS="file_delete_success"
     FILE_DELETE_ERROR="file_delete_error"
+    CHUNKS_COUNT_RETRIEVED="chunks_count_retrieved"
+    NO_COLLECTION_FOUND="no_collection_found"
     

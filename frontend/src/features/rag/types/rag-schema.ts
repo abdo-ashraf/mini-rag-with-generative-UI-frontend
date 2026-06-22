@@ -25,6 +25,8 @@ export const SignalSchema = z.enum([
   "project_delete_error",
   "file_delete_success",
   "file_delete_error",
+  "chunks_count_retrieved",
+  "no_collection_found",
 ])
 export type ResponseSignal = z.infer<typeof SignalSchema>
 
@@ -76,7 +78,6 @@ export type ProjectFilesResponse = z.infer<typeof ProjectFilesResponseSchema>
 
 // 4. Process Request (Input validation)
 export const ProcessRequestSchema = z.object({
-  file_id: z.string().nullable().optional(),
   chunk_size: z.number().int().min(1).default(100),
   overlap_size: z.number().int().min(0).default(20),
   do_reset: z.number().int().min(0).max(1).default(0),
@@ -98,11 +99,19 @@ export const CollectionInfoSchema = z.object({
     name: z.string().optional(),
     points_count: z.number().optional(),
     vectors_count: z.number().optional(),
-  }).catchall(z.any()),
+  }).catchall(z.any()).nullable(),
 })
 export type CollectionInfo = z.infer<typeof CollectionInfoSchema>
 
-// 7. Search Results Schema
+// 7. Chunks Count Response Schema
+export const ChunksCountResponseSchema = z.object({
+  signal: SignalSchema,
+  project_id: z.number().int(),
+  chunks_count: z.number().int(),
+})
+export type ChunksCountResponse = z.infer<typeof ChunksCountResponseSchema>
+
+// 8. Search Results Schema
 export const RetrievedDocumentSchema = z.object({
   text: z.string(),
   score: z.number(),

@@ -34,12 +34,12 @@ def push_after_process_task(self, prev_task_result):
                  autoretry_for=(Exception,),
                  retry_kwargs={'max_retries': 3, 'countdown': 60}
                 )
-def process_and_push_workflow(  self, project_id: int, 
-                                file_id: int, chunk_size: int,
+def process_and_push_workflow(  self, project_id: int,
+                                chunk_size: int,
                                 overlap_size: int, do_reset: int):
 
     workflow = chain(
-        process_project_files.s(project_id, file_id, chunk_size, overlap_size, do_reset),
+        process_project_files.s(project_id, chunk_size, overlap_size, do_reset),
         push_after_process_task.s()
     )
 

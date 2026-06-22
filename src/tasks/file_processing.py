@@ -19,18 +19,18 @@ logger = logging.getLogger(__name__)
                  autoretry_for=(Exception,),
                  retry_kwargs={'max_retries': 3, 'countdown': 60}
                 )
-def process_project_files(self, project_id: int, 
-                          file_id: int, chunk_size: int,
+def process_project_files(self, project_id: int,
+                          chunk_size: int,
                           overlap_size: int, do_reset: int):
 
     return asyncio.run(
-        _process_project_files(self, project_id, file_id, chunk_size,
+        _process_project_files(self, project_id, chunk_size,
                                overlap_size, do_reset)
     )
 
 
-async def _process_project_files(task_instance, project_id: int, 
-                                 file_id: int, chunk_size: int,
+async def _process_project_files(task_instance, project_id: int,
+                                 chunk_size: int,
                                  overlap_size: int, do_reset: int):
 
     
@@ -49,7 +49,6 @@ async def _process_project_files(task_instance, project_id: int,
         # Define task arguments for idempotency check
         task_args = {
             "project_id": project_id,
-            "file_id": file_id,
             "chunk_size": chunk_size,
             "overlap_size": overlap_size,
             "do_reset": do_reset
@@ -113,46 +112,15 @@ async def _process_project_files(task_instance, project_id: int,
                 db_client=db_client
             )
 
-        project_files_ids = {}
-        if file_id:
-            asset_record = await asset_model.get_asset_record(
-                asset_project_id=project.project_id,
-                asset_name=file_id
-            )
+        project_files = await asset_model.get_all_project_assets(
+            asset_project_id=project.project_id,
+            asset_type=AssetTypeEnum.FILE.value,
+        )
 
-            if asset_record is None:
-                task_instance.update_state(
-                    state="FAILURE",
-                    meta={
-                        "signal": ResponseSignal.FILE_ID_ERROR.value,
-                    }
-                )
-
-                # Update task status to FAILURE
-                await idempotency_manager.update_task_status(
-                    execution_id=task_record.execution_id,
-                    status='FAILURE',
-                    result={"signal": ResponseSignal.FILE_ID_ERROR.value}
-                )
-
-                raise Exception(f"No assets for file: {file_id}")
-
-            project_files_ids = {
-                asset_record.asset_id: asset_record.asset_name
-            }
-        
-        else:
-            
-
-            project_files = await asset_model.get_all_project_assets(
-                asset_project_id=project.project_id,
-                asset_type=AssetTypeEnum.FILE.value,
-            )
-
-            project_files_ids = {
-                record.asset_id: record.asset_name
-                for record in project_files
-            }
+        project_files_ids = {
+            record.asset_id: record.asset_name
+            for record in project_files
+        }
 
         if len(project_files_ids) == 0:
 

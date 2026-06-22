@@ -35,7 +35,7 @@ async def index_project(request: Request, project_id: int, push_request: PushReq
 
 @nlp_router.get("/index/info/{project_id}")
 async def get_project_index_info(request: Request, project_id: int):
-    
+
     project_model = await ProjectModel.create_instance(
         db_client=request.app.db_client
     )
@@ -51,12 +51,39 @@ async def get_project_index_info(request: Request, project_id: int):
         template_parser=request.app.template_parser,
     )
 
-    collection_info = await nlp_controller.get_vector_db_collection_info(project=project)
+    collection_name = nlp_controller.create_collection_name(project_id=project.project_id)
+
+    collection_exists = await request.app.vectordb_client.is_collection_existed(
+        collection_name=collection_name
+    )
+
+    if not collection_exists:
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "signal": ResponseSignal.NO_COLLECTION_FOUND.value,
+                "message": f"Vector collection '{collection_name}' does not exist. Run processing and indexing to create it.",
+                "collection_info": None,
+            }
+        )
+
+    try:
+        collection_info = await nlp_controller.get_vector_db_collection_info(project=project)
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving collection info for project {project_id}: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "signal": ResponseSignal.VECTORDB_SEARCH_ERROR.value,
+                "message": f"Failed to read collection info: {str(e)}",
+                "collection_info": None,
+            }
+        )
 
     return JSONResponse(
         content={
             "signal": ResponseSignal.VECTORDB_COLLECTION_RETRIEVED.value,
-            "collection_info": collection_info
+            "collection_info": collection_info,
         }
     )
 

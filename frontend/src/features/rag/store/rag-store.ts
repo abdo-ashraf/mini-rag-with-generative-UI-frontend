@@ -95,6 +95,15 @@ export const useRagStore = create<RagState & RagActions>()(
     }),
     {
       name: "mini-rag-store",
+      version: 1,
+      migrate: (persistedState: any, version: number) => {
+        if (version === 0) {
+          if (persistedState.activeTab === "debug") {
+            persistedState.activeTab = "dashboard"
+          }
+        }
+        return persistedState as RagState & RagActions
+      },
     }
   )
 )

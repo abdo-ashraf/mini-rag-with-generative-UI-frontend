@@ -74,22 +74,22 @@ class PGVectorProvider(VectorDBInterface):
     async def get_collection_info(self, collection_name: str) -> dict:
         async with self.db_client() as session:
             async with session.begin():
-                
+
                 table_info_sql = sql_text(f'''
                     SELECT schemaname, tablename, tableowner, tablespace, hasindexes 
                     FROM pg_tables 
                     WHERE tablename = :collection_name
                 ''')
 
-                count_sql = sql_text(f'SELECT COUNT(*) FROM {collection_name}')
-
                 table_info = await session.execute(table_info_sql, {"collection_name": collection_name})
-                record_count = await session.execute(count_sql)
-
                 table_data = table_info.fetchone()
+
                 if not table_data:
                     return None
-                
+
+                count_sql = sql_text(f'SELECT COUNT(*) FROM {collection_name}')
+                record_count = await session.execute(count_sql)
+
                 return {
                     "table_info": {
                         "schemaname": table_data[0],

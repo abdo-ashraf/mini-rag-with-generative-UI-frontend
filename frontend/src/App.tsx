@@ -11,7 +11,7 @@ function App() {
   const { activeTab, setActiveTab } = useRagStore()
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground select-none">
+    <div className="flex flex-col min-h-screen bg-background text-foreground">
       {/* 1. Global Project Header */}
       <ProjectHeader />
 
@@ -31,9 +31,9 @@ function App() {
               <UploadIcon className="size-4" />
               <span className="hidden sm:inline font-semibold">Document Ingest</span>
             </TabsTrigger>
-            <TabsTrigger value="debug" className="flex items-center gap-1.5 cursor-pointer h-8">
+            <TabsTrigger value="dashboard" className="flex items-center gap-1.5 cursor-pointer h-8">
               <DatabaseIcon className="size-4" />
-              <span className="hidden sm:inline font-semibold">Diagnostics</span>
+              <span className="hidden sm:inline font-semibold">Project Dashboard</span>
             </TabsTrigger>
           </TabsList>
         </div>
@@ -49,7 +49,7 @@ function App() {
           <TabsContent value="ingest" className="m-0 focus-visible:outline-none">
             <IngestPanel />
           </TabsContent>
-          <TabsContent value="debug" className="m-0 focus-visible:outline-none">
+          <TabsContent value="dashboard" className="m-0 focus-visible:outline-none">
             <InfoPanel />
           </TabsContent>
         </div>

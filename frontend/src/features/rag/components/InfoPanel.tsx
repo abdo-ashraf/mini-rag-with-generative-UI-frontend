@@ -1,27 +1,98 @@
-import { useRagStore } from "../store/rag-store"
-import { useIndexInfo, useProjectFiles, useDeleteFile } from "../hooks/use-rag"
+import { useState, useRef } from "react"
+import { useRagStore, type UploadedFile } from "../store/rag-store"
+import { useIndexInfo, useProjectFiles, useDeleteFile, useUploadFile, useChunksCount } from "../hooks/use-rag"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import { Badge } from "@/shared/ui/badge"
+import { Progress } from "@/shared/ui/progress"
 import {
   DatabaseIcon,
   RefreshCwIcon,
   Loader2Icon,
-  TagIcon,
   BinaryIcon,
   BoxesIcon,
-  AlertTriangleIcon,
   FileTextIcon,
   FolderOpenIcon,
   Clock3Icon,
   Trash2Icon,
+  UploadIcon,
+  CheckCircle2Icon,
 } from "lucide-react"
 
 export function InfoPanel() {
-  const { projectId } = useRagStore()
-  const { data, isLoading, isError, refetch } = useIndexInfo(projectId)
+  const { projectId, addUploadedFile } = useRagStore()
+  const { data, isLoading, refetch } = useIndexInfo(projectId)
   const { data: filesData, isLoading: filesLoading, isError: filesIsError, refetch: refetchFiles } = useProjectFiles(projectId)
+  const { data: chunksData, refetch: refetchChunks, isFetching: chunksFetching } = useChunksCount(projectId)
   const deleteFileMutation = useDeleteFile(projectId)
+
+  const [dragActive, setDragActive] = useState(false)
+  const [localFile, setLocalFile] = useState<File | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const uploadMutation = useUploadFile(projectId)
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true)
+    } else if (e.type === "dragleave") {
+      setDragActive(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setLocalFile(e.dataTransfer.files[0])
+      setUploadError(null)
+      setUploadSuccess(null)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setLocalFile(e.target.files[0])
+      setUploadError(null)
+      setUploadSuccess(null)
+    }
+  }
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleUpload = () => {
+    if (!localFile) return
+    setUploadError(null)
+    setUploadSuccess(null)
+
+    uploadMutation.mutate(localFile, {
+      onSuccess: (data) => {
+        if (data.signal === "file_upload_success" && data.file_id) {
+          const newFile: UploadedFile = {
+            id: data.file_id,
+            name: localFile.name,
+            size: localFile.size,
+            uploadedAt: new Date().toLocaleTimeString(),
+          };
+          addUploadedFile(newFile)
+          setUploadSuccess("Document uploaded successfully! File ID: " + data.file_id)
+          setLocalFile(null)
+        } else {
+          setUploadError(data.signal || "Upload failed")
+        }
+      },
+      onError: (err: any) => {
+        setUploadError(err.message || "Failed to upload file")
+      },
+    })
+  }
 
   const handleDeleteFile = (fileId: number, fileName: string) => {
     const confirmed = window.confirm(
@@ -34,6 +105,16 @@ export function InfoPanel() {
   const handleRefresh = () => {
     refetch()
     refetchFiles()
+    refetchChunks()
+  }
+
+  const formatBytes = (bytes: number, decimals = 2) => {
+    if (!+bytes) return "0 Bytes"
+    const k = 1024
+    const dm = decimals < 0 ? 0 : decimals
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
   }
 
   const collection = data?.collection_info
@@ -49,17 +130,14 @@ export function InfoPanel() {
             <div className="flex flex-col gap-1.5">
               <CardTitle className="text-md flex items-center gap-2">
                 <DatabaseIcon className="size-4 text-primary" />
-                Diagnostics dashboard
+                Project Dashboard
               </CardTitle>
-              <CardDescription>
-                Active project {projectId} with vector index state and stored files surfaced side by side.
-              </CardDescription>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={handleRefresh}
-              disabled={isLoading || filesLoading}
+              disabled={isLoading || filesLoading || chunksFetching}
               className="h-9"
             >
               {isLoading || filesLoading ? (
@@ -67,116 +145,21 @@ export function InfoPanel() {
               ) : (
                 <RefreshCwIcon className="size-3.5 mr-1.5" />
               )}
-              Refresh diagnostics
+              Refresh dashboard
             </Button>
           </div>
         </CardHeader>
 
         <CardContent className="pt-6 space-y-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <DatabaseIcon className="size-4 text-primary" />
-                <span className="text-xs font-semibold uppercase tracking-wide">Project</span>
-              </div>
-              <div className="mt-2 text-2xl font-bold text-foreground">#{projectId}</div>
-              <p className="mt-1 text-xs text-muted-foreground">Current active project used by all ingest and query actions.</p>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <TagIcon className="size-4 text-primary" />
-                <span className="text-xs font-semibold uppercase tracking-wide">Collection</span>
-              </div>
-              <div className="mt-2 text-lg font-bold text-foreground break-all">
-                {collection?.name || `collection_project_${projectId}`}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">Vector namespace associated with the active project.</p>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <FileTextIcon className="size-4 text-primary" />
-                <span className="text-xs font-semibold uppercase tracking-wide">Files</span>
-              </div>
-              <div className="mt-2 text-2xl font-bold text-foreground">{fileCount}</div>
-              <p className="mt-1 text-xs text-muted-foreground">Files currently stored inside the active project.</p>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <BinaryIcon className="size-4 text-primary" />
-                <span className="text-xs font-semibold uppercase tracking-wide">Indexed chunks</span>
-              </div>
-              <div className="mt-2 text-2xl font-bold text-foreground">{pointsCount}</div>
-              <p className="mt-1 text-xs text-muted-foreground">Chunk or vector count returned by the index backend.</p>
-            </div>
-          </div>
-
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {/* Collection Status Card */}
-            <div className="rounded-xl border border-border bg-card shadow-sm">
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
-                  <Loader2Icon className="size-8 animate-spin text-primary" />
-                  <span className="text-sm font-medium">Loading collection info...</span>
-                </div>
-              ) : isError ? (
-                <div className="flex items-start gap-3 p-4 rounded-xl text-sm text-red-800">
-                  <AlertTriangleIcon className="size-5 text-red-600 shrink-0 mt-0.5" />
-                  <div className="flex flex-col gap-1">
-                    <span className="font-semibold text-red-900">Index information unavailable</span>
-                    <p className="text-xs leading-relaxed">
-                      This project does not have a ready vector collection yet. Upload a document, then run processing and indexing to populate the dashboard.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                        <BoxesIcon className="size-4 text-primary" />
-                        Collection status
-                      </h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">Visible state from the vector backend for this project.</p>
-                    </div>
-                    <Badge className="bg-green-500 hover:bg-green-600 text-white font-semibold text-xs py-0.5">
-                      Ready
-                    </Badge>
-                  </div>
-                  <div className="grid gap-3 p-4 sm:grid-cols-3">
-                    <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Namespace</div>
-                      <div className="mt-1 text-sm font-medium text-foreground break-all">
-                        {collection?.name || `collection_project_${projectId}`}
-                      </div>
-                    </div>
-                    <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Points</div>
-                      <div className="mt-1 text-sm font-medium text-foreground">{collection?.points_count ?? 0}</div>
-                    </div>
-                    <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Vectors</div>
-                      <div className="mt-1 text-sm font-medium text-foreground">{collection?.vectors_count ?? 0}</div>
-                    </div>
-                  </div>
-                  <div className="px-4 pb-4 text-xs text-muted-foreground leading-relaxed">
-                    The collection becomes visible after processing and indexing at least one file for the active project.
-                  </div>
-                </>
-              )}
-            </div>
-
             {/* Files in Active Project Card */}
             <div className="rounded-xl border border-border bg-card shadow-sm">
               <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
                 <div>
                   <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <FolderOpenIcon className="size-4 text-primary" />
-                    Files in active project
+                    Asset records stored for project {projectId}
                   </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">Asset records stored in the database for project {projectId}.</p>
                 </div>
                 <Badge variant="outline" className="text-xs">
                   {fileCount} total
@@ -235,13 +218,141 @@ export function InfoPanel() {
                 </div>
               )}
             </div>
+
+            {/* Upload Section */}
+            <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <UploadIcon className="size-4 text-primary" />
+                <span className="text-sm font-semibold text-foreground">Upload a document</span>
+              </div>
+              <div
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={triggerFileInput}
+                className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+                  dragActive
+                    ? "border-primary bg-primary/5"
+                    : localFile
+                    ? "border-green-400 bg-green-50/20"
+                    : "border-border hover:bg-muted/50"
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept=".txt,.pdf,.md,.docx,.json"
+                />
+                <div className="flex items-center justify-center size-10 rounded-full bg-muted/60 text-muted-foreground mb-2">
+                  <UploadIcon className="size-5" />
+                </div>
+                {localFile ? (
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-semibold text-foreground">
+                      Selected: {localFile.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Ready to upload · {formatBytes(localFile.size)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-semibold text-foreground">
+                      Drag & drop file here or click to browse
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Supports TXT, PDF, MD, DOCX, JSON
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {uploadMutation.isPending && (
+                <div className="flex flex-col gap-1 mt-3">
+                  <div className="flex items-center justify-between text-xs font-semibold">
+                    <span className="text-primary">Uploading file to server...</span>
+                  </div>
+                  <Progress value={85} className="h-1.5" />
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-red-100 bg-red-50/40 text-xs text-red-800 mt-3">
+                  <span className="font-semibold text-red-900 shrink-0">Error:</span>
+                  <p>{uploadError}</p>
+                </div>
+              )}
+
+              {uploadSuccess && (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-green-100 bg-green-50/40 text-xs text-green-800 mt-3">
+                  <CheckCircle2Icon className="size-4 text-green-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-green-900 mb-0.5">Success</p>
+                    <p className="text-[11px] text-green-800">{uploadSuccess}</p>
+                  </div>
+                </div>
+              )}
+
+              {localFile && (
+                <div className="flex gap-2 mt-3">
+                  <Button onClick={handleUpload} disabled={uploadMutation.isPending} size="sm">
+                    <UploadIcon data-icon="inline-start" />
+                    Upload Now
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setLocalFile(null)}
+                    disabled={uploadMutation.isPending}
+                    size="sm"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <DatabaseIcon className="size-4 text-primary" />
+                <span className="text-xs font-semibold uppercase tracking-wide">Project</span>
+              </div>
+              <div className="mt-2 text-2xl font-bold text-foreground">#{projectId}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Current active project used by all ingest and query actions.</p>
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <FileTextIcon className="size-4 text-primary" />
+                <span className="text-xs font-semibold uppercase tracking-wide">Files</span>
+              </div>
+              <div className="mt-2 text-2xl font-bold text-foreground">{fileCount}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Files currently stored inside the active project.</p>
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <BoxesIcon className="size-4 text-primary" />
+                <span className="text-xs font-semibold uppercase tracking-wide">Chunks</span>
+              </div>
+              <div className="mt-2 text-2xl font-bold text-foreground">{chunksData?.chunks_count ?? 0}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Total chunks stored in the database for this project.</p>
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <BinaryIcon className="size-4 text-primary" />
+                <span className="text-xs font-semibold uppercase tracking-wide">VECTORS</span>
+              </div>
+              <div className="mt-2 text-2xl font-bold text-foreground">{pointsCount}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Vectors pushed to the index backend for semantic search.</p>
+            </div>
           </div>
         </CardContent>
-
-        <CardFooter className="py-3.5 px-6 border-t border-border bg-muted/20 flex flex-wrap items-center justify-between text-[10px] text-muted-foreground gap-2">
-          <span>Project files are loaded from the active project's database assets.</span>
-          <span>Refresh to sync the latest collection and file state.</span>
-        </CardFooter>
       </Card>
     </div>
   )
