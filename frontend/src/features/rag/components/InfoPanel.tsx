@@ -1,10 +1,23 @@
-import { useState, useRef } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRagStore, type UploadedFile } from "../store/rag-store"
-import { useIndexInfo, useProjectFiles, useDeleteFile, useUploadFile, useChunksCount } from "../hooks/use-rag"
+import {
+  useIndexInfo,
+  useProjectFiles,
+  useDeleteFile,
+  useUploadFile,
+  useChunksCount,
+  useProcessFile,
+  useProcessAndPush,
+  usePushIndex,
+  useProjects,
+  useCreateProject,
+  useDeleteProject,
+} from "../hooks/use-rag"
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import { Badge } from "@/shared/ui/badge"
 import { Progress } from "@/shared/ui/progress"
+import { Input } from "@/shared/ui/input"
 import {
   DatabaseIcon,
   RefreshCwIcon,
@@ -17,19 +30,51 @@ import {
   Trash2Icon,
   UploadIcon,
   CheckCircle2Icon,
+  Settings2Icon,
+  CpuIcon,
+  SparklesIcon,
 } from "lucide-react"
 
 export function InfoPanel() {
-  const { projectId, addUploadedFile } = useRagStore()
+  const {
+    projectId,
+    setProjectId,
+    addUploadedFile,
+    chunkSize,
+    setChunkSize,
+    overlapSize,
+    setOverlapSize,
+    doReset,
+    setDoReset,
+  } = useRagStore()
   const { data, isLoading, refetch } = useIndexInfo(projectId)
   const { data: filesData, isLoading: filesLoading, isError: filesIsError, refetch: refetchFiles } = useProjectFiles(projectId)
   const { data: chunksData, refetch: refetchChunks, isFetching: chunksFetching } = useChunksCount(projectId)
+  const { data: projectsData, isLoading: projectsLoading } = useProjects()
   const deleteFileMutation = useDeleteFile(projectId)
+  const processMutation = useProcessFile(projectId)
+  const processAndPushMutation = useProcessAndPush(projectId)
+  const pushIndexMutation = usePushIndex(projectId)
+  const createProjectMutation = useCreateProject()
+  const deleteProjectMutation = useDeleteProject()
+
+  const projects = projectsData?.projects ?? []
+
+  useEffect(() => {
+    if (projects.length === 0) return
+    const hasCurrentProject = projects.some((project) => project.project_id === projectId)
+    if (!hasCurrentProject) {
+      setProjectId(projects[0].project_id)
+    }
+  }, [projectId, projects, setProjectId])
 
   const [dragActive, setDragActive] = useState(false)
   const [localFile, setLocalFile] = useState<File | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
+  const [ingestJobInfo, setIngestJobInfo] = useState<{ type: string; id: string } | null>(null)
+  const [ingestError, setIngestError] = useState<string | null>(null)
+  const [ingestSuccess, setIngestSuccess] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const uploadMutation = useUploadFile(projectId)
@@ -108,6 +153,112 @@ export function InfoPanel() {
     refetchChunks()
   }
 
+  const handleProjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = parseInt(e.target.value, 10)
+    if (!isNaN(val)) {
+      setProjectId(val)
+    }
+  }
+
+  const handleCreateProject = () => {
+    createProjectMutation.mutate(undefined, {
+      onSuccess: (data) => {
+        setProjectId(data.project.project_id)
+      },
+    })
+  }
+
+  const handleDeleteProject = () => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete Project ${projectId}? This will permanently remove all files, chunks, embeddings, and the project record. This action cannot be undone.`
+    )
+    if (!confirmed) return
+
+    deleteProjectMutation.mutate(projectId, {
+      onSuccess: () => {
+        const remaining = projects.filter((p) => p.project_id !== projectId)
+        if (remaining.length > 0) {
+          setProjectId(remaining[0].project_id)
+        } else {
+          handleCreateProject()
+        }
+      },
+    })
+  }
+
+  const handleProcessOnly = () => {
+    setIngestError(null)
+    setIngestSuccess(null)
+    setIngestJobInfo(null)
+
+    processMutation.mutate(
+      {
+        chunk_size: chunkSize,
+        overlap_size: overlapSize,
+        do_reset: doReset ? 1 : 0,
+      },
+      {
+        onSuccess: (data) => {
+          setIngestSuccess(
+            `Chunking complete! ${data.inserted_chunks} chunks created from ${data.processed_files} file(s).`
+          )
+        },
+        onError: (err: any) => {
+          setIngestError(err.message || "Processing failed")
+        },
+      }
+    )
+  }
+
+  const handleProcessAndPush = () => {
+    setIngestError(null)
+    setIngestSuccess(null)
+    setIngestJobInfo(null)
+
+    processAndPushMutation.mutate(
+      {
+        chunk_size: chunkSize,
+        overlap_size: overlapSize,
+        do_reset: doReset ? 1 : 0,
+      },
+      {
+        onSuccess: (data) => {
+          if (data.workflow_task_id) {
+            setIngestJobInfo({ type: "Complete Indexing Workflow Queued", id: data.workflow_task_id })
+            setIngestSuccess("Full parsing, chunking, and vector indexing workflow started for all files!")
+          } else {
+            setIngestError(data.signal || "Failed to start workflow.")
+          }
+        },
+        onError: (err: any) => {
+          setIngestError(err.message || "Workflow failed")
+        },
+      }
+    )
+  }
+
+  const handleIndexExisting = () => {
+    setIngestError(null)
+    setIngestSuccess(null)
+    setIngestJobInfo(null)
+
+    pushIndexMutation.mutate(
+      {
+        do_reset: doReset ? 1 : 0,
+      },
+      {
+        onSuccess: (data) => {
+          setIngestSuccess(
+            `Indexing complete! ${data.inserted_items_count} chunk(s) pushed to the vector database.`
+          )
+        },
+        onError: (err: any) => {
+          setIngestError(err.message || "Indexing failed")
+        },
+      }
+    )
+  }
+
   const formatBytes = (bytes: number, decimals = 2) => {
     if (!+bytes) return "0 Bytes"
     const k = 1024
@@ -133,20 +284,68 @@ export function InfoPanel() {
                 Project Dashboard
               </CardTitle>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={isLoading || filesLoading || chunksFetching}
-              className="h-9"
-            >
-              {isLoading || filesLoading ? (
-                <Loader2Icon className="size-3.5 animate-spin mr-1.5" />
-              ) : (
-                <RefreshCwIcon className="size-3.5 mr-1.5" />
-              )}
-              Refresh dashboard
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="projectId" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                Active Project ID:
+              </label>
+              <select
+                id="projectId"
+                value={projectId}
+                onChange={handleProjectChange}
+                disabled={projectsLoading || projects.length === 0}
+                className="h-9 min-w-[9rem] rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {projects.length === 0 ? (
+                  <option value={projectId}>No projects available</option>
+                ) : null}
+                {projects.map((project) => (
+                  <option key={project.project_id} value={project.project_id}>
+                    Project {project.project_id}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCreateProject}
+                disabled={createProjectMutation.isPending}
+                className="h-9"
+              >
+                {createProjectMutation.isPending ? "Creating..." : "New Project"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDeleteProject}
+                disabled={deleteProjectMutation.isPending || projects.length === 0}
+                className="h-9 text-destructive hover:text-destructive border-destructive/30 hover:border-destructive"
+              >
+                {deleteProjectMutation.isPending ? (
+                  "Deleting..."
+                ) : (
+                  <>
+                    <Trash2Icon className="size-3.5 mr-1" />
+                    Delete
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isLoading || filesLoading || chunksFetching}
+                className="h-9"
+              >
+                {isLoading || filesLoading ? (
+                  <Loader2Icon className="size-3.5 animate-spin mr-1.5" />
+                ) : (
+                  <RefreshCwIcon className="size-3.5 mr-1.5" />
+                )}
+                Refresh dashboard
+              </Button>
+            </div>
           </div>
         </CardHeader>
 
@@ -312,6 +511,158 @@ export function InfoPanel() {
                   </Button>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* RAG Configuration */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <Settings2Icon className="size-4 text-primary" />
+                <span className="text-sm font-semibold text-foreground">RAG Configuration</span>
+              </div>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="chunkSize" className="text-xs font-semibold text-foreground">
+                    Chunk Size (characters)
+                  </label>
+                  <Input
+                    id="chunkSize"
+                    type="number"
+                    min={1}
+                    value={chunkSize}
+                    onChange={(e) => setChunkSize(parseInt(e.target.value, 10) || 100)}
+                    className="h-9"
+                  />
+                  <span className="text-[10px] text-muted-foreground">
+                    Splits text into intervals of this length.
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="overlapSize" className="text-xs font-semibold text-foreground">
+                    Overlap Size (characters)
+                  </label>
+                  <Input
+                    id="overlapSize"
+                    type="number"
+                    min={0}
+                    value={overlapSize}
+                    onChange={(e) => setOverlapSize(parseInt(e.target.value, 10) || 0)}
+                    className="h-9"
+                  />
+                  <span className="text-[10px] text-muted-foreground">
+                    Retains context from the previous chunk.
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2.5 pt-2">
+                  <input
+                    id="doReset"
+                    type="checkbox"
+                    checked={doReset}
+                    onChange={(e) => setDoReset(e.target.checked)}
+                    className="size-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <div className="flex flex-col">
+                    <label htmlFor="doReset" className="text-xs font-semibold text-foreground cursor-pointer">
+                      Reset Vector Index
+                    </label>
+                    <span className="text-[10px] text-muted-foreground">
+                      Clear prior embeddings before writing new ones.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Process & Index */}
+            <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <CpuIcon className="size-4 text-primary" />
+                <span className="text-sm font-semibold text-foreground">Process & Index Documents</span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Trigger backend processing workers to chunk, index, and vectorize documents in the active project.
+              </p>
+
+              {ingestError && (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-red-100 bg-red-50/40 text-xs text-red-800 mb-3">
+                  <span className="font-semibold text-red-900 shrink-0">Error:</span>
+                  <p>{ingestError}</p>
+                </div>
+              )}
+
+              {ingestSuccess && (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-green-100 bg-green-50/40 text-xs text-green-800 mb-3">
+                  <CheckCircle2Icon className="size-4 text-green-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-green-900 mb-0.5">Success</p>
+                    <p className="text-[11px] text-green-800">{ingestSuccess}</p>
+                  </div>
+                </div>
+              )}
+
+              {ingestJobInfo && (
+                <div className="flex flex-col gap-2 p-3.5 rounded-lg border border-primary/10 bg-primary/5 text-xs mb-3">
+                  <div className="flex items-center gap-2 text-primary font-semibold">
+                    <CpuIcon className="size-4" />
+                    {ingestJobInfo.type}
+                  </div>
+                  <div className="flex flex-col gap-1 mt-1 text-muted-foreground">
+                    <span>Celery Worker Job ID (Queued):</span>
+                    <code className="bg-background border border-border p-1.5 rounded text-[10px] break-all select-all font-mono">
+                      {ingestJobInfo.id}
+                    </code>
+                  </div>
+                  <span className="text-[9px] text-muted-foreground/80 mt-1 leading-relaxed">
+                    Notice: Backend execution runs asynchronously. You can search or run queries once the worker finishes chunking and indexing.
+                  </span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2 mt-2">
+                <Button
+                  variant="outline"
+                  onClick={handleIndexExisting}
+                  disabled={
+                    processMutation.isPending ||
+                    processAndPushMutation.isPending ||
+                    pushIndexMutation.isPending
+                  }
+                  size="sm"
+                >
+                  <DatabaseIcon className="size-4 mr-1.5" />
+                  Index Existing Chunks
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={handleProcessOnly}
+                  disabled={
+                    processMutation.isPending ||
+                    processAndPushMutation.isPending ||
+                    pushIndexMutation.isPending
+                  }
+                  size="sm"
+                >
+                  <CpuIcon className="size-4 mr-1.5" />
+                  Chunk All Files
+                </Button>
+
+                <Button
+                  onClick={handleProcessAndPush}
+                  disabled={
+                    processMutation.isPending ||
+                    processAndPushMutation.isPending ||
+                    pushIndexMutation.isPending
+                  }
+                  size="sm"
+                >
+                  <SparklesIcon data-icon="inline-start" />
+                  Process & Index All (Workflow)
+                </Button>
+              </div>
             </div>
           </div>
 
