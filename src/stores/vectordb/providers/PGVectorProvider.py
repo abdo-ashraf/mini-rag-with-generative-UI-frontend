@@ -323,6 +323,7 @@ class PGVectorProvider(VectorDBInterface):
         query = f"""
             SELECT
                 {PgVectorTableSchemeEnums.TEXT.value} AS text,
+                {PgVectorTableSchemeEnums.METADATA.value} AS metadata,
                 {config["score"]} AS score,
                 {config["distance"]} AS distance
             FROM {collection_name}
@@ -352,6 +353,7 @@ class PGVectorProvider(VectorDBInterface):
                     RetrievedDocument(
                         text=row.text,
                         score=row.score,
+                        metadata=row.metadata if hasattr(row, 'metadata') else None,
                     )
                     for row in result.fetchall()
                 ]

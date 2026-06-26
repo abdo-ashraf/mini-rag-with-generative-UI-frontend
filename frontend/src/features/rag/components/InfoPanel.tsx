@@ -264,7 +264,7 @@ export function InfoPanel() {
                       Drag & drop file here or click to browse
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      Supports TXT, PDF, MD, DOCX, JSON
+                      Supports TXT, PDF.
                     </span>
                   </div>
                 )}

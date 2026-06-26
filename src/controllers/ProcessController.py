@@ -3,6 +3,7 @@ from .ProjectController import ProjectController
 import os
 from langchain_community.document_loaders import TextLoader
 from langchain_community.document_loaders import PyMuPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from models import ProcessingEnum
 from typing import List
 from dataclasses import dataclass
@@ -63,47 +64,21 @@ class ProcessController(BaseController):
             for rec in file_content
         ]
 
-        # chunks = text_splitter.create_documents(
-        #     file_content_texts,
-        #     metadatas=file_content_metadata
-        # )
-
-        chunks = self.process_simpler_splitter(
-            texts=file_content_texts,
-            metadatas=file_content_metadata,
+        text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
+            chunk_overlap=overlap_size,
         )
 
-        return chunks
+        documents = text_splitter.create_documents(
+            texts=file_content_texts,
+            metadatas=file_content_metadata,
+        )
 
-    def process_simpler_splitter(self, texts: List[str], metadatas: List[dict], chunk_size: int, splitter_tag: str="\n"):
-        
-        full_text = " ".join(texts)
-
-        # split by splitter_tag
-        lines = [ doc.strip() for doc in full_text.split(splitter_tag) if len(doc.strip()) > 1 ]
-
-        chunks = []
-        current_chunk = ""
-
-        for line in lines:
-            current_chunk += line + splitter_tag
-            if len(current_chunk) >= chunk_size:
-                chunks.append(Document(
-                    page_content=current_chunk.strip(),
-                    metadata={}
-                ))
-
-                current_chunk = ""
-
-        if len(current_chunk) >= 0:
-            chunks.append(Document(
-                page_content=current_chunk.strip(),
-                metadata={}
-            ))
+        chunks = [
+            Document(page_content=doc.page_content, metadata={**doc.metadata, "file_id": file_id})
+            for doc in documents
+        ]
 
         return chunks
-
-
     
 

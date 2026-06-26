@@ -24,7 +24,7 @@ interface RagState {
   activeFileId: string | null
   uploadedFiles: UploadedFile[]
   chatHistory: Message[]
-  searchResults: { text: string; score: number }[]
+  searchResults: { text: string; score: number; metadata?: Record<string, any> }[]
 }
 
 interface RagActions {
@@ -38,7 +38,7 @@ interface RagActions {
   clearUploadedFiles: () => void
   addChatMessage: (msg: Omit<Message, "id">) => void
   clearChatHistory: () => void
-  setSearchResults: (results: { text: string; score: number }[]) => void
+  setSearchResults: (results: { text: string; score: number; metadata?: Record<string, any> }[]) => void
 }
 
 export const useRagStore = create<RagState & RagActions>()(

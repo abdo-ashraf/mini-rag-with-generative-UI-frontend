@@ -76,17 +76,21 @@ async def delete_project(request: Request, project_id: int):
         )
 
     try:
-        # 2. Delete associated chunks
+        # 2. Delete vector DB collection
+        collection_name = f"collection_{request.app.vectordb_client.default_vector_size}_{project_id}"
+        is_collection_existed = await request.app.vectordb_client.is_collection_existed(collection_name=collection_name)
+        if is_collection_existed:
+            await request.app.vectordb_client.delete_collection(collection_name=collection_name)
+        else:
+            logger.warning(f"Collection {collection_name} does not exist in vector DB. Skipping deletion.")
+
+        # 3. Delete associated chunks
         chunk_model = await ChunkModel.create_instance(db_client=request.app.db_client)
         await chunk_model.delete_chunks_by_project_id(project_id=project_id)
 
-        # 3. Delete associated assets
+        # 4. Delete associated assets
         asset_model = await AssetModel.create_instance(db_client=request.app.db_client)
         await asset_model.delete_assets_by_project_id(asset_project_id=project_id)
-
-        # 4. Delete vector DB collection
-        collection_name = f"collection_{request.app.vectordb_client.default_vector_size}_{project_id}"
-        await request.app.vectordb_client.delete_collection(collection_name=collection_name)
 
         # 5. Delete project files from disk
         project_controller = ProjectController()

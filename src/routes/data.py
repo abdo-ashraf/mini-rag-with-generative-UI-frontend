@@ -302,10 +302,14 @@ async def delete_project_file(request: Request, project_id: int, file_id: int):
 
         if chunk_ids:
             collection_name = f"collection_{request.app.vectordb_client.default_vector_size}_{project_id}"
-            await request.app.vectordb_client.delete_by_record_ids(
-                collection_name=collection_name,
-                record_ids=list(chunk_ids)
-            )
+            is_collection_existed = await request.app.vectordb_client.is_collection_existed(collection_name=collection_name)
+            if is_collection_existed:
+                await request.app.vectordb_client.delete_by_record_ids(
+                    collection_name=collection_name,
+                    record_ids=list(chunk_ids)
+                )
+            else:
+                logger.warning(f"Collection {collection_name} does not exist in vector DB. Skipping deletion of records.")
 
         await chunk_model.delete_chunks_by_asset_id(asset_id=file_id)
 

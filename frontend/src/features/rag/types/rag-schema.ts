@@ -131,6 +131,7 @@ export type ChunksCountResponse = z.infer<typeof ChunksCountResponseSchema>
 export const RetrievedDocumentSchema = z.object({
   text: z.string(),
   score: z.number(),
+  metadata: z.record(z.string(), z.any()).optional(),
 })
 export type RetrievedDocument = z.infer<typeof RetrievedDocumentSchema>
 

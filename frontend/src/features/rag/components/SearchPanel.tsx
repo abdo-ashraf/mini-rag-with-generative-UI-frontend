@@ -24,6 +24,16 @@ const METRIC_LABELS: Record<string, string> = {
   inner_product: "Inner Product",
 }
 
+const METADATA_FIELDS = ["page", "total_pages", "title", "author", "format"] as const
+
+const METADATA_LABELS: Record<string, string> = {
+  page: "Page",
+  total_pages: "Total Pages",
+  title: "Title",
+  author: "Author",
+  format: "Format",
+}
+
 export function SearchPanel() {
   const { projectId, searchResults, setSearchResults } = useRagStore()
   const [query, setQuery] = useState("")
@@ -227,6 +237,21 @@ export function SearchPanel() {
                     Similarity: {doc.score.toFixed(4)}
                   </Badge>
                 </CardHeader>
+
+                {doc.metadata && METADATA_FIELDS.some(f => doc.metadata![f] != null) && (
+                  <div className="px-4 py-1.5 flex flex-wrap gap-1.5 border-b border-border/50 bg-muted/5">
+                    {METADATA_FIELDS.map((field) => {
+                      const val = doc.metadata![field]
+                      if (val == null) return null
+                      return (
+                        <Badge key={field} variant="outline" className="text-[9px] font-normal px-1.5 py-0 leading-relaxed bg-background text-muted-foreground border-dashed">
+                          {METADATA_LABELS[field]}: {String(val)}
+                        </Badge>
+                      )
+                    })}
+                  </div>
+                )}
+
                 <CardContent className="p-4 text-sm leading-relaxed text-foreground select-all whitespace-pre-wrap">
                   {doc.text}
                 </CardContent>
