@@ -1,29 +1,24 @@
 from ..VectorDBInterface import VectorDBInterface
-from ..VectorDBEnums import (DistanceMethodEnums, PgVectorTableSchemeEnums, 
-                             PgVectorDistanceMethodEnums, PgVectorIndexTypeEnums)
+from ..VectorDBEnums import (PgVectorTableSchemeEnums, 
+                             PgVectorDistanceMethodEnums, PgVectorIndexTypeEnums,
+                             DistanceMetric)
 import logging
-from typing import List
+from typing import List, Optional
 from models.db_schemes import RetrievedDocument
 from sqlalchemy.sql import text as sql_text
 import json
 
 class PGVectorProvider(VectorDBInterface):
 
-    def __init__(self, db_client, default_vector_size: int = 786,
-                       distance_method: str = None, index_threshold: int=100):
+    def __init__(self, db_client, default_vector_size: int = 786):
         
         self.db_client = db_client
         self.default_vector_size = default_vector_size
         
-        self.index_threshold = index_threshold
-
-        if distance_method == DistanceMethodEnums.COSINE.value:
-            distance_method = PgVectorDistanceMethodEnums.COSINE.value
-        elif distance_method == DistanceMethodEnums.DOT.value:
-            distance_method = PgVectorDistanceMethodEnums.DOT.value
+        self.index_threshold = 100
+        self.distance_method = PgVectorDistanceMethodEnums.COSINE.value
 
         self.pgvector_table_prefix = PgVectorTableSchemeEnums._PREFIX.value
-        self.distance_method = distance_method
 
         self.logger = logging.getLogger("uvicorn")
         self.default_index_name = lambda collection_name: f"{collection_name}_vector_idx"
@@ -289,7 +284,14 @@ class PGVectorProvider(VectorDBInterface):
                 await session.commit()
         return True
 
-    async def search_by_vector(self, collection_name: str, vector: list, limit: int):
+    async def search_by_vector(
+        self,
+        collection_name: str,
+        vector: list,
+        limit: int = 5,
+        distance_metric: DistanceMetric = DistanceMetric.COSINE,
+        min_score: Optional[float] = None,
+    ):
 
         is_collection_existed = await self.is_collection_existed(collection_name=collection_name)
         if not is_collection_existed:
@@ -297,22 +299,59 @@ class PGVectorProvider(VectorDBInterface):
             return False
         
         vector = "[" + ",".join([ str(v) for v in vector ]) + "]"
+
+        metric_config = {
+            DistanceMetric.COSINE: {
+                "operator": "<=>",
+                "score": "1 - (vector <=> :vector)",
+                "distance": "(vector <=> :vector)",
+            },
+            DistanceMetric.L2: {
+                "operator": "<->",
+                "score": "1 / (1 + (vector <-> :vector))",
+                "distance": "(vector <-> :vector)",
+            },
+            DistanceMetric.INNER_PRODUCT: {
+                "operator": "<#>",
+                "score": "-(vector <#> :vector)",
+                "distance": "(vector <#> :vector)",
+            },
+        }
+
+        config = metric_config.get(distance_metric, metric_config[DistanceMetric.COSINE])
+
+        query = f"""
+            SELECT
+                {PgVectorTableSchemeEnums.TEXT.value} AS text,
+                {config["score"]} AS score,
+                {config["distance"]} AS distance
+            FROM {collection_name}
+        """
+
+        params = {
+            "vector": vector,
+            "limit": limit,
+        }
+
+        if min_score is not None and distance_metric == DistanceMetric.COSINE:
+            query += f"""
+            WHERE {config["score"]} >= :min_score
+            """
+            params["min_score"] = min_score
+
+        query += f"""
+            ORDER BY distance ASC
+            LIMIT :limit
+        """
+
         async with self.db_client() as session:
             async with session.begin():
-                search_sql = sql_text(f'SELECT {PgVectorTableSchemeEnums.TEXT.value} as text, 1 - ({PgVectorTableSchemeEnums.VECTOR.value} <=> :vector) as score'
-                                      f' FROM {collection_name}'
-                                      ' ORDER BY score DESC '
-                                      f'LIMIT {limit}'
-                                      )
-                
-                result = await session.execute(search_sql, {"vector": vector})
-
-                records = result.fetchall()
+                result = await session.execute(sql_text(query), params)
 
                 return [
                     RetrievedDocument(
-                        text=record.text,
-                        score=record.score
+                        text=row.text,
+                        score=row.score,
                     )
-                    for record in records
+                    for row in result.fetchall()
                 ]

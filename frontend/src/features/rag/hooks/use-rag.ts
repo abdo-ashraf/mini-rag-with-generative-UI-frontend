@@ -133,7 +133,7 @@ export const usePushIndex = (projectId: number) => {
 // 7. Search index
 export const useSearchIndex = (projectId: number) => {
   return useMutation({
-    mutationFn: (payload: { text: string; limit?: number }) =>
+    mutationFn: (payload: { text: string; limit?: number; distance_metric?: string; min_score?: number }) =>
       ragService.searchIndex(projectId, payload),
   })
 }
@@ -173,7 +173,7 @@ export const useDeleteProject = () => {
 // 9. Ask RAG Question
 export const useAnswerRag = (projectId: number) => {
   return useMutation({
-    mutationFn: (payload: { text: string; limit?: number }) =>
+    mutationFn: (payload: { text: string; limit?: number; distance_metric?: string; min_score?: number }) =>
       ragService.answerRag(projectId, payload),
   })
 }

@@ -146,7 +146,7 @@ export const ragService = {
   // POST /api/v1/nlp/index/search/{project_id}
   async searchIndex(
     projectId: number,
-    payload: { text: string; limit?: number }
+    payload: { text: string; limit?: number; distance_metric?: string; min_score?: number }
   ): Promise<SearchResponse> {
     const response = await fetch(`/api/v1/nlp/index/search/${projectId}`, {
       method: "POST",
@@ -189,7 +189,7 @@ export const ragService = {
   // POST /api/v1/nlp/index/answer/{project_id}
   async answerRag(
     projectId: number,
-    payload: { text: string; limit?: number }
+    payload: { text: string; limit?: number; distance_metric?: string; min_score?: number }
   ): Promise<AnswerResponse> {
     const response = await fetch(`/api/v1/nlp/index/answer/${projectId}`, {
       method: "POST",

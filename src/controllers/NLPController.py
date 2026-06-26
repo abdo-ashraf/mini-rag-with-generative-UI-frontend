@@ -61,7 +61,14 @@ class NLPController(BaseController):
 
         return True
 
-    async def search_vector_db_collection(self, project: Project, text: str, limit: int = 10):
+    async def search_vector_db_collection(
+        self,
+        project: Project,
+        text: str,
+        limit: int = 10,
+        distance_metric: str = "cosine",
+        min_score: float | None = None,
+    ):
 
         # step1: get collection name
         query_vector = None
@@ -81,18 +88,30 @@ class NLPController(BaseController):
             return False    
 
         # step3: do semantic search
+        from stores.vectordb.VectorDBEnums import DistanceMetric
+        dm = DistanceMetric(distance_metric)
+
         results = await self.vectordb_client.search_by_vector(
             collection_name=collection_name,
             vector=query_vector,
-            limit=limit
+            limit=limit,
+            distance_metric=dm,
+            min_score=min_score,
         )
 
-        if not results:
+        if results is False:
             return False
 
-        return results
+        return results if results else []
     
-    async def answer_rag_question(self, project: Project, query: str, limit: int = 10):
+    async def answer_rag_question(
+        self,
+        project: Project,
+        query: str,
+        limit: int = 10,
+        distance_metric: str = "cosine",
+        min_score: float | None = None,
+    ):
         
         answer, full_prompt, chat_history = None, None, None
 
@@ -101,6 +120,8 @@ class NLPController(BaseController):
             project=project,
             text=query,
             limit=limit,
+            distance_metric=distance_metric,
+            min_score=min_score,
         )
 
         if not retrieved_documents or len(retrieved_documents) == 0:

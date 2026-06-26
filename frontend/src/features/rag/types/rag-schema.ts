@@ -137,6 +137,7 @@ export type RetrievedDocument = z.infer<typeof RetrievedDocumentSchema>
 export const SearchResponseSchema = z.object({
   signal: SignalSchema,
   results: z.array(RetrievedDocumentSchema),
+  message: z.string().optional(),
 })
 export type SearchResponse = z.infer<typeof SearchResponseSchema>
 

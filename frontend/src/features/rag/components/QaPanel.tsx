@@ -14,12 +14,22 @@ import {
   UserIcon,
   BotIcon,
   Loader2Icon,
+  Settings2Icon,
 } from "lucide-react"
+
+const DISTANCE_METRICS = [
+  { value: "cosine", label: "Cosine" },
+  { value: "l2", label: "L2" },
+  { value: "inner_product", label: "Inner Product" },
+] as const
 
 export function QaPanel() {
   const { projectId, chatHistory, addChatMessage, clearChatHistory } = useRagStore()
   const [input, setInput] = useState("")
   const [expandedPromptId, setExpandedPromptId] = useState<string | null>(null)
+  const [distanceMetric, setDistanceMetric] = useState("cosine")
+  const [minScore, setMinScore] = useState("")
+  const [showConfig, setShowConfig] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const answerMutation = useAnswerRag(projectId)
@@ -48,7 +58,12 @@ export function QaPanel() {
 
     // 2. Query RAG backend
     answerMutation.mutate(
-      { text: question, limit: 5 },
+      {
+        text: question,
+        limit: 5,
+        distance_metric: distanceMetric,
+        min_score: minScore ? parseFloat(minScore) : undefined,
+      },
       {
         onSuccess: (data) => {
           if (data.signal === "rag_answer_success") {
@@ -196,25 +211,80 @@ export function QaPanel() {
 
         {/* Message Input Footer */}
         <CardFooter className="p-4 border-t border-border bg-card shrink-0">
-          <form onSubmit={handleSend} className="flex items-center gap-2 w-full">
-            <Input
-              type="text"
-              placeholder="Type your question about the indexed document context..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={answerMutation.isPending}
-              className="flex-1 h-10"
-              autoFocus
-            />
-            <Button
-              type="submit"
-              size="default"
-              disabled={!input.trim() || answerMutation.isPending}
-              className="h-10 shrink-0"
-            >
-              <SendIcon data-icon="inline-start" />
-              Ask RAG
-            </Button>
+          <form onSubmit={handleSend} className="flex flex-col gap-2 w-full">
+            <div className="flex items-center gap-2 w-full">
+              <Input
+                type="text"
+                placeholder="Type your question about the indexed document context..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={answerMutation.isPending}
+                className="flex-1 h-10"
+                autoFocus
+              />
+              <Button
+                type="submit"
+                size="default"
+                disabled={!input.trim() || answerMutation.isPending}
+                className="h-10 shrink-0"
+              >
+                <SendIcon data-icon="inline-start" />
+                Ask RAG
+              </Button>
+            </div>
+
+            {/* Toggle config row */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfig(!showConfig)}
+                className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+              >
+                <Settings2Icon className="size-3" />
+                Vector search settings
+              </button>
+
+              {showConfig && (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="qa-distance-metric" className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap">
+                      Distance:
+                    </label>
+                    <select
+                      id="qa-distance-metric"
+                      value={distanceMetric}
+                      onChange={(e) => setDistanceMetric(e.target.value)}
+                      disabled={answerMutation.isPending}
+                      className="h-7 rounded-md border border-input bg-background px-1.5 text-[10px] font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+                    >
+                      {DISTANCE_METRICS.map((m) => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {distanceMetric === "cosine" && (
+                    <div className="flex items-center gap-1.5">
+                      <label htmlFor="qa-min-score" className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap">
+                        Min score:
+                      </label>
+                      <Input
+                        id="qa-min-score"
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={minScore}
+                        onChange={(e) => setMinScore(e.target.value)}
+                        placeholder="0.0"
+                        className="w-16 h-7 text-[10px]"
+                        disabled={answerMutation.isPending}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </form>
         </CardFooter>
       </Card>

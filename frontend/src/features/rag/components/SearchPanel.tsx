@@ -12,11 +12,26 @@ import {
   LayersIcon,
 } from "lucide-react"
 
+const DISTANCE_METRICS = [
+  { value: "cosine", label: "Cosine Similarity" },
+  { value: "l2", label: "L2 Distance" },
+  { value: "inner_product", label: "Inner Product" },
+] as const
+
+const METRIC_LABELS: Record<string, string> = {
+  cosine: "Cosine Similarity",
+  l2: "L2 Distance",
+  inner_product: "Inner Product",
+}
+
 export function SearchPanel() {
   const { projectId, searchResults, setSearchResults } = useRagStore()
   const [query, setQuery] = useState("")
   const [limit, setLimit] = useState(5)
+  const [distanceMetric, setDistanceMetric] = useState("cosine")
+  const [minScore, setMinScore] = useState("")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
   const searchMutation = useSearchIndex(projectId)
 
@@ -25,16 +40,20 @@ export function SearchPanel() {
     if (!query.trim() || searchMutation.isPending) return
 
     setErrorMsg(null)
+    setSuccessMsg(null)
 
     searchMutation.mutate(
-      { text: query.trim(), limit },
+      {
+        text: query.trim(),
+        limit,
+        distance_metric: distanceMetric,
+        min_score: minScore ? parseFloat(minScore) : undefined,
+      },
       {
         onSuccess: (data) => {
           if (data.signal === "vectordb_search_success") {
             setSearchResults(data.results || [])
-            if (data.results.length === 0) {
-              setErrorMsg("No matching vectors found for this query.")
-            }
+            setSuccessMsg(data.message || null)
           } else {
             setErrorMsg(`Search failed: Backend returned signal "${data.signal}"`)
           }
@@ -66,49 +85,96 @@ export function SearchPanel() {
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-4">
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <div className="flex-1 relative">
-              <SearchIcon className="absolute left-3 top-3 size-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Type query to find matching vector chunks..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                disabled={searchMutation.isPending}
-                className="pl-9 h-10 w-full"
-              />
-            </div>
-            
-            <div className="flex items-center gap-2 shrink-0">
-              <label htmlFor="limit" className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                Max results:
-              </label>
-              <Input
-                id="limit"
-                type="number"
-                min={1}
-                max={50}
-                value={limit}
-                onChange={(e) => setLimit(parseInt(e.target.value, 10) || 5)}
-                className="w-16 h-10"
-                disabled={searchMutation.isPending}
-              />
+          <form onSubmit={handleSearch} className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="flex-1 relative">
+                <SearchIcon className="absolute left-3 top-3 size-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Type query to find matching vector chunks..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  disabled={searchMutation.isPending}
+                  className="pl-9 h-10 w-full"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <label htmlFor="limit" className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                  Max results:
+                </label>
+                <Input
+                  id="limit"
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={limit}
+                  onChange={(e) => setLimit(parseInt(e.target.value, 10) || 5)}
+                  className="w-16 h-10"
+                  disabled={searchMutation.isPending}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={!query.trim() || searchMutation.isPending}
+                className="h-10 px-5 shrink-0"
+              >
+                {searchMutation.isPending ? (
+                  <Loader2Icon className="size-4 animate-spin mr-1.5" />
+                ) : (
+                  <SearchIcon className="size-4 mr-1.5" />
+                )}
+                Search Index
+              </Button>
             </div>
 
-            <Button
-              type="submit"
-              disabled={!query.trim() || searchMutation.isPending}
-              className="h-10 px-5 shrink-0"
-            >
-              {searchMutation.isPending ? (
-                <Loader2Icon className="size-4 animate-spin mr-1.5" />
-              ) : (
-                <SearchIcon className="size-4 mr-1.5" />
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label htmlFor="distance-metric" className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                  Distance:
+                </label>
+                <select
+                  id="distance-metric"
+                  value={distanceMetric}
+                  onChange={(e) => setDistanceMetric(e.target.value)}
+                  disabled={searchMutation.isPending}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+                >
+                  {DISTANCE_METRICS.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {distanceMetric === "cosine" && (
+                <div className="flex items-center gap-2">
+                  <label htmlFor="min-score" className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                    Min score:
+                  </label>
+                  <Input
+                    id="min-score"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={minScore}
+                    onChange={(e) => setMinScore(e.target.value)}
+                    placeholder="0.0"
+                    className="w-20 h-8 text-xs"
+                    disabled={searchMutation.isPending}
+                  />
+                </div>
               )}
-              Search Index
-            </Button>
+            </div>
           </form>
 
+          {successMsg && (
+            <div className="mt-3 flex items-start gap-2.5 p-3 rounded-lg border border-emerald-100 bg-emerald-50/40 text-xs text-emerald-800">
+              <span className="font-semibold text-emerald-900 shrink-0">Status:</span>
+              <p>{successMsg}</p>
+            </div>
+          )}
           {errorMsg && (
             <div className="mt-3 flex items-start gap-2.5 p-3 rounded-lg border border-red-100 bg-red-50/40 text-xs text-red-800">
               <span className="font-semibold text-red-900 shrink-0">Status:</span>
@@ -127,7 +193,7 @@ export function SearchPanel() {
           </h2>
           {searchResults.length > 0 && (
             <span className="text-[10px] text-muted-foreground">
-              Sorted by cosine similarity / distance metrics
+              Sorted by {METRIC_LABELS[distanceMetric] || distanceMetric}
             </span>
           )}
         </div>

@@ -8,6 +8,11 @@ class DistanceMethodEnums(Enum):
     COSINE = "cosine"
     DOT = "dot"
 
+class DistanceMetric(str, Enum):
+    COSINE = "cosine"
+    L2 = "l2"
+    INNER_PRODUCT = "inner_product"
+
 class PgVectorTableSchemeEnums(Enum):
     ID = 'id'
     TEXT = 'text'

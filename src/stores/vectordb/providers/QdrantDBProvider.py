@@ -1,24 +1,18 @@
 from qdrant_client import models, QdrantClient
 from ..VectorDBInterface import VectorDBInterface
-from ..VectorDBEnums import DistanceMethodEnums
+from ..VectorDBEnums import DistanceMetric
 import logging
-from typing import List
+from typing import List, Optional
 from models.db_schemes import RetrievedDocument
 
 class QdrantDBProvider(VectorDBInterface):
 
-    def __init__(self, db_client: str, default_vector_size: int = 786,
-                                     distance_method: str = None, index_threshold: int=100):
+    def __init__(self, db_client: str, default_vector_size: int = 786):
 
         self.client = None
         self.db_client = db_client
-        self.distance_method = None
+        self.distance_method = models.Distance.COSINE
         self.default_vector_size = default_vector_size
-
-        if distance_method == DistanceMethodEnums.COSINE.value:
-            self.distance_method = models.Distance.COSINE
-        elif distance_method == DistanceMethodEnums.DOT.value:
-            self.distance_method = models.Distance.DOT
 
         self.logger = logging.getLogger('uvicorn')
 
@@ -143,7 +137,14 @@ class QdrantDBProvider(VectorDBInterface):
         )
         return True
 
-    async def search_by_vector(self, collection_name: str, vector: list, limit: int = 5):
+    async def search_by_vector(
+        self,
+        collection_name: str,
+        vector: list,
+        limit: int = 5,
+        distance_metric: DistanceMetric = DistanceMetric.COSINE,
+        min_score: Optional[float] = None,
+    ):
 
         results = self.client.search(
             collection_name=collection_name,
@@ -151,8 +152,8 @@ class QdrantDBProvider(VectorDBInterface):
             limit=limit
         )
 
-        if not results or len(results) == 0:
-            return None
+        if not results:
+            return []
         
         return [
             RetrievedDocument(**{

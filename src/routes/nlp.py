@@ -169,21 +169,37 @@ async def search_index(request: Request, project_id: int, search_request: Search
     )
 
     results = await nlp_controller.search_vector_db_collection(
-        project=project, text=search_request.text, limit=search_request.limit
+        project=project,
+        text=search_request.text,
+        limit=search_request.limit,
+        distance_metric=search_request.distance_metric,
+        min_score=search_request.min_score,
     )
+
+    if results==[]:
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "signal": ResponseSignal.VECTORDB_SEARCH_SUCCESS.value,
+                "results": [],
+                "message": "No results found for the given query."
+            }
+        )
 
     if not results:
         return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={
-                    "signal": ResponseSignal.VECTORDB_SEARCH_ERROR.value
+                    "signal": ResponseSignal.VECTORDB_SEARCH_ERROR.value,
+                    "message": "Failed to search vector database."
                 }
             )
     
     return JSONResponse(
         content={
             "signal": ResponseSignal.VECTORDB_SEARCH_SUCCESS.value,
-            "results": [ result.dict()  for result in results ]
+            "results": [ result.dict()  for result in results ],
+            "message": f"Found {len(results)} results for the given query."
         }
     )
 
@@ -209,6 +225,8 @@ async def answer_rag(request: Request, project_id: int, search_request: SearchRe
         project=project,
         query=search_request.text,
         limit=search_request.limit,
+        distance_metric=search_request.distance_metric,
+        min_score=search_request.min_score,
     )
 
     if not answer:
